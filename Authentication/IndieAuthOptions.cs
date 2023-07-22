@@ -14,6 +14,16 @@ namespace IndieAuth.Authentication
         /// </summary>
         public ISecureDataFormat<AuthenticationProperties> StateDataFormat { get; set; } = default!;
 
+
+        /// <summary>
+        /// Gets or sets the authentication scheme corresponding to the middleware
+        /// responsible of persisting user's identity after a successful authentication with external authentication provider.
+        /// This value typically corresponds to an external cookie middleware registered in the Startup class.
+        /// When omitted, <see cref="IndieAuthDefaults.ExternalCookieSignInScheme"/> is used as a fallback value.
+        /// </summary>
+        public string ExternalSignInScheme { get; set; } = IndieAuthDefaults.ExternalCookieSignInScheme;
+
+
         /// <summary>
         /// IndieAuth Server Metadata Endpoint. See: <see href="https://indieauth.spec.indieweb.org/#indieauth-server-metadata">https://indieauth.spec.indieweb.org/#indieauth-server-metadata</see>
         /// </summary>
@@ -58,5 +68,10 @@ namespace IndieAuth.Authentication
         /// Userinfo endpoint
         /// </summary>
         public string? UserinfoEndpoint { get; set; } = default;
+
+        /// <summary>
+        /// ClientId, Me, and Redirect URIs must use the HTTPS scheme
+        /// </summary>
+        public bool RequireHttps { get; set; } = true;
     }
 }
