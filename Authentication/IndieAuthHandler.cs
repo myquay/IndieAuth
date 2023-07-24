@@ -71,24 +71,23 @@ namespace IndieAuth.Authentication
 
             var queryParameters = base.Request.Query.ToDictionary(x => x.Key, x => x.Value.ToString());
 
-            if(!await ValidateAuthorizationRequest(queryParameters))
+            if (!await ValidateAuthorizationRequest(queryParameters))
                 return true;
-            
+
             if (authResult.Succeeded)
             {
                 await Response.WriteAsync("LOGGED IN EXTERNALLY - PROCESSING");
             }
             else
             {
-                var properties = new AuthenticationProperties()
+                await Context.ChallengeAsync(base.Options.ExternalSignInScheme, new AuthenticationProperties(new Dictionary<string, string>
+                {
+                    { "me", queryParameters["me"]},
+                    { "client_id", queryParameters["client_id"] }
+                })
                 {
                     RedirectUri = Context.Request.GetEncodedUrl(),
-                };
-
-                properties.SetParameter("me", queryParameters["me"]);
-                properties.SetParameter("client_id", queryParameters["client_id"]);
-
-                await Context.ChallengeAsync(base.Options.ExternalSignInScheme, properties);
+                });
 
                 return true;
             }
@@ -103,15 +102,15 @@ namespace IndieAuth.Authentication
         /// <returns></returns>
         private async Task<bool> ValidateAuthorizationRequest(Dictionary<string, string> queryParameters)
         {
-            if(!queryParameters.ContainsKey("redirect_uri") || !Uri.TryCreate(queryParameters["redirect_uri"], UriKind.Absolute, out Uri? redirectUriOutput))
+            if (!queryParameters.ContainsKey("redirect_uri") || !Uri.TryCreate(queryParameters["redirect_uri"], UriKind.Absolute, out Uri? redirectUriOutput))
             {
                 await Response.WriteAsync(JsonSerializer.Serialize(new IndieAuthErrorResponse
                 {
-                     Error = IndieAuthError.INVALID_REQUEST,
-                     ErrorDescription = "The redirect_uri parameter is required. See: https://indieauth.spec.indieweb.org/#authorization-request"
+                    Error = IndieAuthError.INVALID_REQUEST,
+                    ErrorDescription = "The redirect_uri parameter is required. See: https://indieauth.spec.indieweb.org/#authorization-request"
                 }, new JsonSerializerOptions
                 {
-                     PropertyNamingPolicy = new SnakeCaseNamingPolicy()
+                    PropertyNamingPolicy = new SnakeCaseNamingPolicy()
                 }));
                 return false;
             }
@@ -127,7 +126,7 @@ namespace IndieAuth.Authentication
             {
                 query.Add("error", IndieAuthError.INVALID_REQUEST);
                 query.Add("description", Uri.EscapeDataString("The response_type parameter is required. See: https://indieauth.spec.indieweb.org/#authorization-request"));
-                
+
                 redirect.Query = query.ToString();
                 Response.Redirect(redirect.ToString());
                 return false;
@@ -163,8 +162,8 @@ namespace IndieAuth.Authentication
                 redirect.Query = query.ToString();
                 Response.Redirect(redirect.ToString());
                 return false;
-            } 
-            else if (!new[]{"http", "https" }.Contains(clientId.Scheme))
+            }
+            else if (!new[] { "http", "https" }.Contains(clientId.Scheme))
             {
                 query.Add("error", IndieAuthError.INVALID_REQUEST);
                 query.Add("description", Uri.EscapeDataString("The client_id scheme must be http or https. See: https://indieauth.spec.indieweb.org/#client-identifier"));
@@ -200,7 +199,7 @@ namespace IndieAuth.Authentication
                 Response.Redirect(redirect.ToString());
                 return false;
             }
-            else if(IPAddress.TryParse(clientId.Host, out IPAddress? address) && address.ToString() != "27.0.0.1" && address.ToString() != "[::1]")
+            else if (IPAddress.TryParse(clientId.Host, out IPAddress? address) && address.ToString() != "27.0.0.1" && address.ToString() != "[::1]")
             {
                 query.Add("error", IndieAuthError.INVALID_REQUEST);
                 query.Add("description", Uri.EscapeDataString("The client_id path must contain a host name or loopback interface. See: https://indieauth.spec.indieweb.org/#client-identifier"));
@@ -250,7 +249,7 @@ namespace IndieAuth.Authentication
                 Response.Redirect(redirect.ToString());
                 return false;
             }
-            else if(!Uri.TryCreate(queryParameters["client_id"], UriKind.Absolute, out Uri? clientId) || 
+            else if (!Uri.TryCreate(queryParameters["client_id"], UriKind.Absolute, out Uri? clientId) ||
                 redirectUri.Scheme != clientId.Scheme ||
                 redirectUri.Host != clientId.Host ||
                 redirectUri.Port != clientId.Port)
@@ -354,7 +353,7 @@ namespace IndieAuth.Authentication
             #endregion
 
             return await Task.FromResult(true);
-            
+
         }
 
         /// <summary>
@@ -393,7 +392,7 @@ namespace IndieAuth.Authentication
 
         protected override Task<HandleRequestResult> HandleRemoteAuthenticateAsync()
         {
-                throw new NotImplementedException();
+            throw new NotImplementedException();
         }
     }
 }
