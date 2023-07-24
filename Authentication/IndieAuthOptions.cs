@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Authentication;
+﻿using IndieAuth.Authentication.Events;
+using Microsoft.AspNetCore.Authentication;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,6 +10,14 @@ namespace IndieAuth.Authentication
 {
     public class IndieAuthOptions : RemoteAuthenticationOptions
     {
+        /// <summary>
+        /// Initializes a new instance of <see cref="IndieAuthOptions"/>.
+        /// </summary>
+        public IndieAuthOptions()
+        {
+            Events = new IndieAuthEvents();
+        }
+
         /// <summary>
         /// Gets or sets the type used to secure data handled by the middleware.
         /// </summary>
@@ -73,5 +82,14 @@ namespace IndieAuth.Authentication
         /// ClientId, Me, and Redirect URIs must use the HTTPS scheme
         /// </summary>
         public bool RequireHttps { get; set; } = true;
+
+        /// <summary>
+        /// Gets or sets the <see cref="IndieAuthEvents"/> used to handle authentication events.
+        /// </summary>
+        public new IndieAuthEvents Events
+        {
+            get { return (IndieAuthEvents)base.Events; }
+            set { base.Events = value; }
+        }
     }
 }
