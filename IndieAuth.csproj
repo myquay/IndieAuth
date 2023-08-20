@@ -7,11 +7,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.Authentication" Version="2.2.0" />
+    <Compile Remove="IndieToken\**" />
+    <EmbeddedResource Remove="IndieToken\**" />
+    <None Remove="IndieToken\**" />
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="IndieToken\" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication" Version="2.2.0" />
   </ItemGroup>
 
 </Project>
