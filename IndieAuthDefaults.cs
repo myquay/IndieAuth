@@ -18,11 +18,6 @@ namespace IndieAuth
         public const string AuthenticationScheme = "IndieAuth";
 
         /// <summary>
-        /// Default value for SignInScheme property in the <see cref="IndieAuthOptions"/>.
-        /// </summary>
-        public const string SignInScheme = "IndieAuthCookie";
-
-        /// <summary>
         /// External cookie for downstream providers
         /// </summary>
         public const string ExternalCookieSignInScheme = "ExternalCookie";

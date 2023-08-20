@@ -62,7 +62,7 @@ namespace IndieAuth.Authentication
             where THandler : IndieAuthHandler<TOptions>
         {
             builder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<IPostConfigureOptions<TOptions>, IndieAuthPostConfigureOptions<TOptions, THandler>>());
-            return builder.AddRemoteScheme<TOptions, THandler>(authenticationScheme, displayName, configureOptions);
+            return builder.AddScheme<TOptions, THandler>(authenticationScheme, displayName, configureOptions);
         }
     }
 }

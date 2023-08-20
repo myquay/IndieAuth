@@ -3,6 +3,7 @@ using IndieAuth.Infrastructure;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Extensions;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System;
@@ -20,27 +21,24 @@ using System.Web;
 
 namespace IndieAuth.Authentication
 {
-    //TODO: COMPLETE
-    public class IndieAuthHandler<TOptions> : RemoteAuthenticationHandler<TOptions> where TOptions : IndieAuthOptions, new()
+    public class IndieAuthHandler<TOptions> : AuthenticationHandler<TOptions>, IAuthenticationRequestHandler where TOptions : IndieAuthOptions, new()
     {
         public IndieAuthHandler(IOptionsMonitor<TOptions> options, ILoggerFactory logger, UrlEncoder encoder, ISystemClock clock) : base(options, logger, encoder, clock)
         {
         }
 
-        public async override Task<bool> ShouldHandleRequestAsync()
+        public async Task<bool> ShouldHandleRequestAsync()
         {
             if ((base.Options.EnableMetadataEndpoint && base.Options.MetadataEndpoint == base.Request.Path) ||
                 (base.Options.AuthorizationEndpoint == base.Request.Path))
             {
                 return true;
             }
-            else
-            {
-                return await base.ShouldHandleRequestAsync();
-            }
+
+            return false;
         }
 
-        public async override Task<bool> HandleRequestAsync()
+        public async Task<bool> HandleRequestAsync()
         {
             if (!await ShouldHandleRequestAsync())
             {
@@ -54,14 +52,12 @@ namespace IndieAuth.Authentication
             {
                 return await HandleIndieAuthServerAuthorization();
             }
-            else
-            {
-                return await base.HandleRequestAsync();
-            }
+            
+            return true;
         }
 
         /// <summary>
-        /// Handle the request to the authorze endpoint
+        /// Handle the request to the authorize endpoint
         /// </summary>
         /// <returns>Return true to stop request processing</returns>
         private async Task<bool> HandleIndieAuthServerAuthorization()
@@ -76,14 +72,30 @@ namespace IndieAuth.Authentication
 
             if (authResult.Succeeded)
             {
-                await Response.WriteAsync("LOGGED IN EXTERNALLY - PROCESSING");
+                if (!authResult.VerifyWebsite(queryParameters["me"]))
+                {
+                    var message = $"The user is not signed in with the correct website. Expected: '{queryParameters["me"]?.Trim('/')}', Actual: '{authResult.GetSuppliedWebsiteParameter()}'";
+                    //await Events.(new RemoteFailureContext(Context, Scheme, base.Options, new Exception(message)));
+
+                    queryParameters["redirect_uri"] = QueryHelpers.AddQueryString(queryParameters["redirect_uri"], "error", "access_denied");
+                    queryParameters["redirect_uri"] = QueryHelpers.AddQueryString(queryParameters["redirect_uri"], "error_description", message);
+                    queryParameters["redirect_uri"] = QueryHelpers.AddQueryString(queryParameters["redirect_uri"], "state", queryParameters["state"]);
+
+                    Response.Redirect(queryParameters["redirect_uri"]);
+                    return true;
+                }
+                else
+                {
+                    //TODO: GENERATE AUTHORIZATION CODE AND RETURN
+                    await Response.WriteAsync("LOGGED IN EXTERNALLY - PROCESSING AUTHORIZE ENDPOINT");
+                    return true;
+                }
             }
             else
             {
                 await Context.ChallengeAsync(base.Options.ExternalSignInScheme, new AuthenticationProperties(new Dictionary<string, string>
                 {
-                    { "me", queryParameters["me"]},
-                    { "client_id", queryParameters["client_id"] }
+                    { "me", queryParameters["me"]}
                 })
                 {
                     RedirectUri = Context.Request.GetEncodedUrl(),
@@ -91,13 +103,10 @@ namespace IndieAuth.Authentication
 
                 return true;
             }
-
-            return true;
         }
 
-
         /// <summary>
-        /// Handle the request to the authorze endpoint
+        /// Handle the request to the authorize endpoint
         /// </summary>
         /// <returns></returns>
         private async Task<bool> ValidateAuthorizationRequest(Dictionary<string, string> queryParameters)
@@ -369,7 +378,7 @@ namespace IndieAuth.Authentication
                 Issuer = base.Options.Issuer,
                 ScopesSupported = base.Options.Scopes,
                 RevocationEndpoint = base.Options.RevocationEndpoint != null ? $"{base.Options.Issuer}{base.Options.RevocationEndpoint}" : null,
-                TokenEndpoint = $"{base.Options.Issuer}/{base.Options.TokenEndpoint}",
+                TokenEndpoint = $"{base.Options.Issuer}{base.Options.TokenEndpoint}",
                 UserinfoEndpoint = base.Options.UserinfoEndpoint != null ? $"{base.Options.Issuer}{base.Options.UserinfoEndpoint}" : null
             };
         }
@@ -390,9 +399,14 @@ namespace IndieAuth.Authentication
             return true;
         }
 
-        protected override Task<HandleRequestResult> HandleRemoteAuthenticateAsync()
+        /// <summary>
+        /// Handle a request secured with an IndieAuth token
+        /// </summary>
+        /// <returns></returns>
+        protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
         {
-            throw new NotImplementedException();
+            //TODO: AUTHENTICATE BASED ON THE SUPPLIED BEARER TOKEN
+            return AuthenticateResult.Fail("Not signed in");
         }
     }
 }

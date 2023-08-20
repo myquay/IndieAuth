@@ -1,5 +1,6 @@
 ﻿using IndieAuth.Authentication.Events;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.DataProtection;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -8,7 +9,7 @@ using System.Threading.Tasks;
 
 namespace IndieAuth.Authentication
 {
-    public class IndieAuthOptions : RemoteAuthenticationOptions
+    public class IndieAuthOptions : AuthenticationSchemeOptions
     {
         /// <summary>
         /// Initializes a new instance of <see cref="IndieAuthOptions"/>.
@@ -23,6 +24,10 @@ namespace IndieAuth.Authentication
         /// </summary>
         public ISecureDataFormat<AuthenticationProperties> StateDataFormat { get; set; } = default!;
 
+        /// <summary>
+        /// Gets or sets the type used to secure data.
+        /// </summary>
+        public IDataProtectionProvider? DataProtectionProvider { get; set; }
 
         /// <summary>
         /// Gets or sets the authentication scheme corresponding to the middleware
@@ -31,7 +36,6 @@ namespace IndieAuth.Authentication
         /// When omitted, <see cref="IndieAuthDefaults.ExternalCookieSignInScheme"/> is used as a fallback value.
         /// </summary>
         public string ExternalSignInScheme { get; set; } = IndieAuthDefaults.ExternalCookieSignInScheme;
-
 
         /// <summary>
         /// IndieAuth Server Metadata Endpoint. See: <see href="https://indieauth.spec.indieweb.org/#indieauth-server-metadata">https://indieauth.spec.indieweb.org/#indieauth-server-metadata</see>
