@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Authentication;
+﻿using IndieAuth.Authentication;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
@@ -9,7 +10,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace IndieAuth.Authentication
+namespace IndieAuth
 {
     /// <summary>
     /// Extension methods to add IndieAuth authentication.
@@ -62,7 +63,7 @@ namespace IndieAuth.Authentication
             where THandler : IndieAuthHandler<TOptions>
         {
             builder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<IPostConfigureOptions<TOptions>, IndieAuthPostConfigureOptions<TOptions, THandler>>());
-            return builder.AddScheme<TOptions, THandler>(authenticationScheme, displayName, configureOptions);
+            return builder.AddRemoteScheme<TOptions, THandler>(authenticationScheme, displayName, configureOptions);
         }
     }
 }

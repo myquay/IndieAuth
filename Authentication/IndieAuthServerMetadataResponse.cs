@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace IndieAuth.Authentication.Responses
+namespace IndieAuth.Authentication
 {
     /// <summary>
     /// Server metadata response. See <see href="https://indieauth.spec.indieweb.org/#indieauth-server-metadata">https://indieauth.spec.indieweb.org/#indieauth-server-metadata</see>.
@@ -19,7 +19,7 @@ namespace IndieAuth.Authentication.Responses
         /// <summary>
         /// Authorization Endpoint
         /// </summary>
-        public string AuthorizationEndpoint { get; set; } = default!;   
+        public string AuthorizationEndpoint { get; set; } = default!;
 
         /// <summary>
         /// Token Endpoint

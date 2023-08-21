@@ -1,412 +1,399 @@
-﻿using IndieAuth.Authentication.Responses;
+﻿using IndieAuth.Events;
+using IndieAuth.Extensions;
 using IndieAuth.Infrastructure;
+using Microformats;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net;
+using Microsoft.Extensions.Primitives;
+using System.Globalization;
 using System.Net.Http.Headers;
-using System.Runtime.CompilerServices;
+using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
-using System.Text.RegularExpressions;
-using System.Threading.Tasks;
-using System.Web;
 
-namespace IndieAuth.Authentication
+namespace IndieAuth.Authentication;
+
+/// <summary>
+/// An authentication handler that supports IndieAuth.
+/// </summary>
+/// <typeparam name="TOptions">The type of options.</typeparam>
+public class IndieAuthHandler<TOptions> : RemoteAuthenticationHandler<TOptions> where TOptions : IndieAuthOptions, new()
 {
-    public class IndieAuthHandler<TOptions> : AuthenticationHandler<TOptions>, IAuthenticationRequestHandler where TOptions : IndieAuthOptions, new()
+    /// <summary>
+    /// Gets the <see cref="HttpClient"/> instance used to communicate with the remote authentication provider.
+    /// </summary>
+    protected HttpClient Backchannel => Options.Backchannel;
+
+    /// <summary>
+    /// Allows for handling different events during the authentication process.
+    /// </summary>
+    protected new IndieAuthEvents Events
     {
-        public IndieAuthHandler(IOptionsMonitor<TOptions> options, ILoggerFactory logger, UrlEncoder encoder, ISystemClock clock) : base(options, logger, encoder, clock)
+        get { return (IndieAuthEvents)base.Events; }
+        set { base.Events = value; }
+    }
+
+    public IndieAuthHandler(IOptionsMonitor<TOptions> options, ILoggerFactory logger, UrlEncoder encoder, ISystemClock clock) : base(options, logger, encoder, clock)
+    {
+    }
+
+    /// <summary>
+    /// Creates a new instance of the events instance.
+    /// </summary>
+    /// <returns>A new instance of the events instance.</returns>
+    protected override Task<object> CreateEventsAsync() => Task.FromResult<object>(new IndieAuthEvents());
+
+    /// <inheritdoc />
+    protected override async Task<HandleRequestResult> HandleRemoteAuthenticateAsync()
+    {
+        var query = Request.Query;
+
+        var state = query["state"];
+        var properties = Options.StateDataFormat.Unprotect(state);
+
+        //Rehydrate the Me property from the state
+        properties.SetParameter(IndieAuthChallengeProperties.MeKey, properties.Items[IndieAuthChallengeProperties.MeKey]);
+
+        if (properties == null)
         {
+            return HandleRequestResults.InvalidState;
         }
 
-        public async Task<bool> ShouldHandleRequestAsync()
+        // OAuth2 10.12 CSRF
+        if (!ValidateCorrelationId(properties))
         {
-            if ((base.Options.EnableMetadataEndpoint && base.Options.MetadataEndpoint == base.Request.Path) ||
-                (base.Options.AuthorizationEndpoint == base.Request.Path))
-            {
-                return true;
-            }
-
-            return false;
+            return HandleRequestResult.Fail("Correlation failed.", properties);
         }
 
-        public async Task<bool> HandleRequestAsync()
+        var error = query["error"];
+        if (!StringValues.IsNullOrEmpty(error))
         {
-            if (!await ShouldHandleRequestAsync())
+            var errorDescription = query["error_description"];
+            var errorUri = query["error_uri"];
+
+            var failureMessage = new StringBuilder();
+            failureMessage.Append(error);
+            if (!StringValues.IsNullOrEmpty(errorDescription))
             {
-                return false;
+                failureMessage.Append(";Description=").Append(errorDescription);
             }
-            else if (base.Options.EnableMetadataEndpoint && base.Options.MetadataEndpoint == base.Request.Path)
+            if (!StringValues.IsNullOrEmpty(errorUri))
             {
-                return await WriteIndieAuthServerMetatdata();
+                failureMessage.Append(";Uri=").Append(errorUri);
             }
-            else if (base.Options.AuthorizationEndpoint == base.Request.Path)
-            {
-                return await HandleIndieAuthServerAuthorization();
-            }
-            
-            return true;
+
+            var ex = new AuthenticationFailureException(failureMessage.ToString());
+            ex.Data["error"] = error.ToString();
+            ex.Data["error_description"] = errorDescription.ToString();
+            ex.Data["error_uri"] = errorUri.ToString();
+
+            return HandleRequestResult.Fail(ex, properties);
         }
 
-        /// <summary>
-        /// Handle the request to the authorize endpoint
-        /// </summary>
-        /// <returns>Return true to stop request processing</returns>
-        private async Task<bool> HandleIndieAuthServerAuthorization()
+        var code = query["code"];
+
+        if (StringValues.IsNullOrEmpty(code))
         {
-            var authResult = await base.Context.AuthenticateAsync(base.Options.ExternalSignInScheme);
-            Response.StatusCode = (int)HttpStatusCode.OK;
-
-            var queryParameters = base.Request.Query.ToDictionary(x => x.Key, x => x.Value.ToString());
-
-            if (!await ValidateAuthorizationRequest(queryParameters))
-                return true;
-
-            if (authResult.Succeeded)
-            {
-                if (!authResult.VerifyWebsite(queryParameters["me"]))
-                {
-                    var message = $"The user is not signed in with the correct website. Expected: '{queryParameters["me"]?.Trim('/')}', Actual: '{authResult.GetSuppliedWebsiteParameter()}'";
-                    //await Events.(new RemoteFailureContext(Context, Scheme, base.Options, new Exception(message)));
-
-                    queryParameters["redirect_uri"] = QueryHelpers.AddQueryString(queryParameters["redirect_uri"], "error", "access_denied");
-                    queryParameters["redirect_uri"] = QueryHelpers.AddQueryString(queryParameters["redirect_uri"], "error_description", message);
-                    queryParameters["redirect_uri"] = QueryHelpers.AddQueryString(queryParameters["redirect_uri"], "state", queryParameters["state"]);
-
-                    Response.Redirect(queryParameters["redirect_uri"]);
-                    return true;
-                }
-                else
-                {
-                    //TODO: GENERATE AUTHORIZATION CODE AND RETURN
-                    await Response.WriteAsync("LOGGED IN EXTERNALLY - PROCESSING AUTHORIZE ENDPOINT");
-                    return true;
-                }
-            }
-            else
-            {
-                await Context.ChallengeAsync(base.Options.ExternalSignInScheme, new AuthenticationProperties(new Dictionary<string, string>
-                {
-                    { "me", queryParameters["me"]}
-                })
-                {
-                    RedirectUri = Context.Request.GetEncodedUrl(),
-                });
-
-                return true;
-            }
+            return HandleRequestResult.Fail("Code was not found.", properties);
         }
 
-        /// <summary>
-        /// Handle the request to the authorize endpoint
-        /// </summary>
-        /// <returns></returns>
-        private async Task<bool> ValidateAuthorizationRequest(Dictionary<string, string> queryParameters)
+        var tokenEndpoint = await DiscoverIndieAuthEndpoints(properties);
+
+        if (!tokenEndpoint.success)
         {
-            if (!queryParameters.ContainsKey("redirect_uri") || !Uri.TryCreate(queryParameters["redirect_uri"], UriKind.Absolute, out Uri? redirectUriOutput))
+            var failure = new AuthenticationFailureException($"Unable to load IndieAuth token endpoint for domain '{properties.GetParameter<string>(IndieAuthChallengeProperties.MeKey)}'");
+
+            failure.Data["error"] = "invalid_request";
+            failure.Data["error_description"] = "Unable to load IndieAuth token endpoint";
+
+            await Events.RemoteFailure(new RemoteFailureContext(Context, Scheme, Options, failure)
             {
-                await Response.WriteAsync(JsonSerializer.Serialize(new IndieAuthErrorResponse
+                Failure = failure,
+            });
+            return HandleRequestResult.Fail(failure, properties);
+        }
+
+        var codeExchangeContext = new IndieAuthCodeExchangeContext(properties, code.ToString(), BuildRedirectUri(Options.CallbackPath));
+        using var tokens = await ExchangeCodeAsync(tokenEndpoint.tokenEndpoint, codeExchangeContext);
+
+        if (tokens.Error != null)
+        {
+            return HandleRequestResult.Fail(tokens.Error, properties);
+        }
+
+        var returnedMe = tokens.Me;
+        var me = properties.GetParameter<string>(IndieAuthChallengeProperties.MeKey);
+
+        if (!string.Equals(returnedMe?.Canonicalize(), me?.Canonicalize(), StringComparison.OrdinalIgnoreCase))
+        {
+            //TODO: HANDLE OTHER CASES AS DETAILED HERE: https://indieauth.spec.indieweb.org/#example-6
+            return HandleRequestResult.Fail("Returned me value does not match the me value from the challenge.", properties);
+        }
+
+        var identity = new ClaimsIdentity(new[]
+        {
+            new Claim(IndieAuthClaims.ME, me!)
+        }, ClaimsIssuer); ;
+
+        if (Options.SaveTokens)
+        {
+            var authTokens = new List<AuthenticationToken>();
+
+            authTokens.Add(new AuthenticationToken { Name = "access_token", Value = tokens.AccessToken });
+            if (!string.IsNullOrEmpty(tokens.RefreshToken))
+            {
+                authTokens.Add(new AuthenticationToken { Name = "refresh_token", Value = tokens.RefreshToken });
+            }
+
+            if (!string.IsNullOrEmpty(tokens.TokenType))
+            {
+                authTokens.Add(new AuthenticationToken { Name = "token_type", Value = tokens.TokenType });
+            }
+
+            if (!string.IsNullOrEmpty(tokens.ExpiresIn))
+            {
+                if (int.TryParse(tokens.ExpiresIn, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value))
                 {
-                    Error = IndieAuthError.INVALID_REQUEST,
-                    ErrorDescription = "The redirect_uri parameter is required. See: https://indieauth.spec.indieweb.org/#authorization-request"
-                }, new JsonSerializerOptions
-                {
-                    PropertyNamingPolicy = new SnakeCaseNamingPolicy()
-                }));
-                return false;
-            }
-
-            var redirect = new UriBuilder(queryParameters["redirect_uri"]);
-            var query = HttpUtility.ParseQueryString(redirect.Query);
-
-            var metadata = GetIndieAuthMetadata();
-
-            #region Validate response_type
-
-            if (!queryParameters.ContainsKey("response_type"))
-            {
-                query.Add("error", IndieAuthError.INVALID_REQUEST);
-                query.Add("description", Uri.EscapeDataString("The response_type parameter is required. See: https://indieauth.spec.indieweb.org/#authorization-request"));
-
-                redirect.Query = query.ToString();
-                Response.Redirect(redirect.ToString());
-                return false;
-            }
-            else if (!metadata.ResponseTypesSupported.Contains(queryParameters["response_type"]))
-            {
-                query.Add("error", IndieAuthError.UNSUPPORTED_RESPONSE_TYPE);
-                query.Add("description", Uri.EscapeDataString($"The response_type supplied is not supported, currently supported types: {String.Join(", ", metadata.ResponseTypesSupported)}"));
-
-                redirect.Query = query.ToString();
-                Response.Redirect(redirect.ToString());
-                return false;
-            }
-
-            #endregion
-
-            #region Validate client_id
-
-            if (!queryParameters.ContainsKey("client_id"))
-            {
-                query.Add("error", IndieAuthError.INVALID_REQUEST);
-                query.Add("description", Uri.EscapeDataString("The client_id parameter is required. See: https://indieauth.spec.indieweb.org/#authorization-request"));
-
-                redirect.Query = query.ToString();
-                Response.Redirect(redirect.ToString());
-                return false;
-            }
-            else if (!Uri.TryCreate(queryParameters["client_id"], UriKind.Absolute, out Uri? clientId))
-            {
-                query.Add("error", IndieAuthError.INVALID_REQUEST);
-                query.Add("description", Uri.EscapeDataString("The client_id parameter must be a wellformed URI string. See: https://indieauth.spec.indieweb.org/#client-identifier"));
-
-                redirect.Query = query.ToString();
-                Response.Redirect(redirect.ToString());
-                return false;
-            }
-            else if (!new[] { "http", "https" }.Contains(clientId.Scheme))
-            {
-                query.Add("error", IndieAuthError.INVALID_REQUEST);
-                query.Add("description", Uri.EscapeDataString("The client_id scheme must be http or https. See: https://indieauth.spec.indieweb.org/#client-identifier"));
-
-                redirect.Query = query.ToString();
-                Response.Redirect(redirect.ToString());
-                return false;
-            }
-            else if (string.IsNullOrWhiteSpace(clientId.GetLeftPart(UriPartial.Path)))
-            {
-                query.Add("error", IndieAuthError.INVALID_REQUEST);
-                query.Add("description", Uri.EscapeDataString("The client_id path must not be empty, specify the path '/' at a minimum. See: https://indieauth.spec.indieweb.org/#client-identifier"));
-
-                redirect.Query = query.ToString();
-                Response.Redirect(redirect.ToString());
-                return false;
-            }
-            else if (clientId.GetLeftPart(UriPartial.Path).Contains("../") || clientId.GetLeftPart(UriPartial.Path).Contains("./"))
-            {
-                query.Add("error", IndieAuthError.INVALID_REQUEST);
-                query.Add("description", Uri.EscapeDataString("The client_id path must not contain single-dot or double-dot path segments. See: https://indieauth.spec.indieweb.org/#client-identifier"));
-
-                redirect.Query = query.ToString();
-                Response.Redirect(redirect.ToString());
-                return false;
-            }
-            else if (!string.IsNullOrEmpty(clientId.Fragment))
-            {
-                query.Add("error", IndieAuthError.INVALID_REQUEST);
-                query.Add("description", Uri.EscapeDataString("The client_id path must not contain a fragment component. See: https://indieauth.spec.indieweb.org/#client-identifier"));
-
-                redirect.Query = query.ToString();
-                Response.Redirect(redirect.ToString());
-                return false;
-            }
-            else if (IPAddress.TryParse(clientId.Host, out IPAddress? address) && address.ToString() != "27.0.0.1" && address.ToString() != "[::1]")
-            {
-                query.Add("error", IndieAuthError.INVALID_REQUEST);
-                query.Add("description", Uri.EscapeDataString("The client_id path must contain a host name or loopback interface. See: https://indieauth.spec.indieweb.org/#client-identifier"));
-
-                redirect.Query = query.ToString();
-                Response.Redirect(redirect.ToString());
-                return false;
-            }
-            else if (base.Options.RequireHttps && clientId.Scheme != "https")
-            {
-                query.Add("error", IndieAuthError.INVALID_REQUEST);
-                query.Add("description", Uri.EscapeDataString("This service only supported the HTTPS scheme for client_id URIs for enhanced security."));
-
-                redirect.Query = query.ToString();
-                Response.Redirect(redirect.ToString());
-                return false;
-            }
-
-            #endregion
-
-            #region Validate redirect_uri
-
-            if (!queryParameters.ContainsKey("redirect_uri"))
-            {
-                query.Add("error", IndieAuthError.INVALID_REQUEST);
-                query.Add("description", Uri.EscapeDataString("The redirect_uri parameter is required. See: https://indieauth.spec.indieweb.org/#authorization-request"));
-
-                redirect.Query = query.ToString();
-                Response.Redirect(redirect.ToString());
-                return false;
-            }
-            else if (!Uri.TryCreate(queryParameters["redirect_uri"], UriKind.Absolute, out Uri? redirectUri))
-            {
-                query.Add("error", IndieAuthError.INVALID_REQUEST);
-                query.Add("description", Uri.EscapeDataString("The redirect_uri parameter must be a wellformed URI string."));
-
-                redirect.Query = query.ToString();
-                Response.Redirect(redirect.ToString());
-                return false;
-            }
-            else if (base.Options.RequireHttps && redirectUri.Scheme != "https")
-            {
-                query.Add("error", IndieAuthError.INVALID_REQUEST);
-                query.Add("description", Uri.EscapeDataString("This service only supported the HTTPS scheme for redirect URIs for enhanced security."));
-
-                redirect.Query = query.ToString();
-                Response.Redirect(redirect.ToString());
-                return false;
-            }
-            else if (!Uri.TryCreate(queryParameters["client_id"], UriKind.Absolute, out Uri? clientId) ||
-                redirectUri.Scheme != clientId.Scheme ||
-                redirectUri.Host != clientId.Host ||
-                redirectUri.Port != clientId.Port)
-            {
-                //TODO: FETCH CLIENTID AND PROCESS FOR REDIRECT URIS
-            }
-
-            #endregion
-
-            #region Validate state parameter
-
-            if (!queryParameters.ContainsKey("state"))
-            {
-                query.Add("error", IndieAuthError.INVALID_REQUEST);
-                query.Add("description", Uri.EscapeDataString("The state parameter is required. See: https://indieauth.spec.indieweb.org/#authorization-request"));
-
-                redirect.Query = query.ToString();
-                Response.Redirect(redirect.ToString());
-                return false;
-            }
-
-            #endregion
-
-            #region Validate code challenge
-
-            if (!queryParameters.ContainsKey("code_challenge"))
-            {
-                query.Add("error", IndieAuthError.INVALID_REQUEST);
-                query.Add("description", Uri.EscapeDataString("The code_challenge parameter is required. See: https://indieauth.spec.indieweb.org/#authorization-request"));
-
-                redirect.Query = query.ToString();
-                Response.Redirect(redirect.ToString());
-                return false;
-            }
-
-            if (!queryParameters.ContainsKey("code_challenge_method"))
-            {
-                query.Add("error", IndieAuthError.INVALID_REQUEST);
-                query.Add("description", Uri.EscapeDataString("The code_challenge_method parameter is required. See: https://indieauth.spec.indieweb.org/#authorization-request"));
-
-                redirect.Query = query.ToString();
-                Response.Redirect(redirect.ToString());
-                return false;
-            }
-            else if (!metadata.CodeChallengeMethodsSupported.Contains(queryParameters["code_challenge_method"]))
-            {
-                query.Add("error", IndieAuthError.INVALID_REQUEST);
-                query.Add("description", Uri.EscapeDataString($"The code_challenge_method supplied is not supported, currently supported methods: {String.Join(", ", metadata.CodeChallengeMethodsSupported)}"));
-
-                redirect.Query = query.ToString();
-                Response.Redirect(redirect.ToString());
-                return false;
-            }
-
-            #endregion
-
-            #region Validate scope
-
-            if (queryParameters.ContainsKey("scope") && !queryParameters["scope"].Split(' ').All(s => metadata.ScopesSupported.Contains(s)))
-            {
-                query.Add("error", IndieAuthError.INVALID_SCOPE);
-                query.Add("description", Uri.EscapeDataString($"The scope supplied is not supported, currently supported scopes: {String.Join(", ", metadata.ScopesSupported)}"));
-
-                redirect.Query = query.ToString();
-                Response.Redirect(redirect.ToString());
-                return false;
-            }
-
-            #endregion
-
-            #region Validate me
-
-
-            #region Validate redirect_uri
-
-            if (queryParameters.ContainsKey("me"))
-            {
-                if (!Uri.TryCreate(queryParameters["redirect_uri"], UriKind.Absolute, out Uri? redirectUri))
-                {
-                    query.Add("error", IndieAuthError.INVALID_REQUEST);
-                    query.Add("description", Uri.EscapeDataString("The me parameter must be a wellformed URI string."));
-
-                    redirect.Query = query.ToString();
-                    Response.Redirect(redirect.ToString());
-                    return false;
-                }
-                else if (base.Options.RequireHttps && redirectUri.Scheme != "https")
-                {
-                    query.Add("error", IndieAuthError.INVALID_REQUEST);
-                    query.Add("description", Uri.EscapeDataString("This service only supported the HTTPS scheme for me URIs for enhanced security."));
-
-                    redirect.Query = query.ToString();
-                    Response.Redirect(redirect.ToString());
-                    return false;
+                    // https://www.w3.org/TR/xmlschema-2/#dateTime
+                    // https://msdn.microsoft.com/en-us/library/az4se3k1(v=vs.110).aspx
+                    var expiresAt = DateTime.UtcNow + TimeSpan.FromSeconds(value);
+                    authTokens.Add(new AuthenticationToken
+                    {
+                        Name = "expires_at",
+                        Value = expiresAt.ToString("o", CultureInfo.InvariantCulture)
+                    });
                 }
             }
 
-            #endregion
-
-
-            #endregion
-
-            return await Task.FromResult(true);
-
+            properties.StoreTokens(authTokens);
         }
 
-        /// <summary>
-        /// Get the metadata for the auth handler
-        /// </summary>
-        /// <returns></returns>
-        private IndieAuthServerMetadataResponse GetIndieAuthMetadata()
+        var ticket = await CreateTicketAsync(identity, properties, tokens);
+        if (ticket != null)
         {
-            return new IndieAuthServerMetadataResponse
-            {
-                AuthorizationEndpoint = $"{base.Options.Issuer}{base.Options.AuthorizationEndpoint}",
-                IntrospectionEndpoint = $"{base.Options.Issuer}{base.Options.IntrospectionEndpoint}",
-                Issuer = base.Options.Issuer,
-                ScopesSupported = base.Options.Scopes,
-                RevocationEndpoint = base.Options.RevocationEndpoint != null ? $"{base.Options.Issuer}{base.Options.RevocationEndpoint}" : null,
-                TokenEndpoint = $"{base.Options.Issuer}{base.Options.TokenEndpoint}",
-                UserinfoEndpoint = base.Options.UserinfoEndpoint != null ? $"{base.Options.Issuer}{base.Options.UserinfoEndpoint}" : null
-            };
+            return HandleRequestResult.Success(ticket);
         }
-
-        /// <summary>
-        /// Write out IndieAuth server metatdata to the response stream
-        /// </summary>
-        /// <returns></returns>
-        private async Task<bool> WriteIndieAuthServerMetatdata()
+        else
         {
-            Response.StatusCode = (int)HttpStatusCode.OK;
-            await Response.WriteAsync(JsonSerializer.Serialize(GetIndieAuthMetadata(), new JsonSerializerOptions
-            {
-                PropertyNamingPolicy = new SnakeCaseNamingPolicy(),
-                AllowTrailingCommas = false
-            }));
-
-            return true;
-        }
-
-        /// <summary>
-        /// Handle a request secured with an IndieAuth token
-        /// </summary>
-        /// <returns></returns>
-        protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
-        {
-            //TODO: AUTHENTICATE BASED ON THE SUPPLIED BEARER TOKEN
-            return AuthenticateResult.Fail("Not signed in");
+            return HandleRequestResult.Fail("Failed to retrieve user information from remote server.", properties);
         }
     }
+
+    /// <summary>
+    /// Exchanges the authorization code for a authorization token from the remote provider.
+    /// </summary>
+    /// <param name="context">The <see cref="OAuthCodeExchangeContext"/>.</param>
+    /// <returns>The response <see cref="OAuthTokenResponse"/>.</returns>
+    protected virtual async Task<IndieAuthTokenResponse> ExchangeCodeAsync(string tokenEndpoint, IndieAuthCodeExchangeContext context)
+    {
+        var tokenRequestParameters = new Dictionary<string, string>()
+            {
+                { "client_id", Options.ClientId },
+                { "redirect_uri", context.RedirectUri },
+                { "code", context.Code },
+                { "grant_type", "authorization_code" },
+            };
+
+        // PKCE https://tools.ietf.org/html/rfc7636#section-4.5, see BuildChallengeUrl
+        if (context.Properties.Items.TryGetValue(IndieAuthConstants.CodeVerifierKey, out var codeVerifier))
+        {
+            tokenRequestParameters.Add(IndieAuthConstants.CodeVerifierKey, codeVerifier!);
+            context.Properties.Items.Remove(IndieAuthConstants.CodeVerifierKey);
+        }
+
+        var requestContent = new FormUrlEncodedContent(tokenRequestParameters!);
+
+        var requestMessage = new HttpRequestMessage(HttpMethod.Post, tokenEndpoint);
+        requestMessage.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        requestMessage.Content = requestContent;
+        requestMessage.Version = Backchannel.DefaultRequestVersion;
+        var response = await Backchannel.SendAsync(requestMessage, Context.RequestAborted);
+        var body = await response.Content.ReadAsStringAsync(Context.RequestAborted);
+
+        return response.IsSuccessStatusCode switch
+        {
+            true => IndieAuthTokenResponse.Success(JsonDocument.Parse(body)),
+            false => PrepareFailedIndieAuthTokenReponse(response, body)
+        };
+    }
+
+    private static IndieAuthTokenResponse PrepareFailedIndieAuthTokenReponse(HttpResponseMessage response, string body)
+    {
+        var exception = IndieAuthTokenResponse.GetStandardErrorException(JsonDocument.Parse(body));
+
+        if (exception is null)
+        {
+            var errorMessage = $"IndieAuth token endpoint failure: Status: {response.StatusCode};Headers: {response.Headers};Body: {body};";
+            return IndieAuthTokenResponse.Failed(new AuthenticationFailureException(errorMessage));
+        }
+
+        return IndieAuthTokenResponse.Failed(exception);
+    }
+
+    /// <summary>
+    /// Creates an <see cref="AuthenticationTicket"/> from the specified <paramref name="tokens"/>.
+    /// </summary>
+    /// <param name="identity">The <see cref="ClaimsIdentity"/>.</param>
+    /// <param name="properties">The <see cref="AuthenticationProperties"/>.</param>
+    /// <param name="tokens">The <see cref="OAuthTokenResponse"/>.</param>
+    /// <returns>The <see cref="AuthenticationTicket"/>.</returns>
+    protected virtual async Task<AuthenticationTicket> CreateTicketAsync(ClaimsIdentity identity, AuthenticationProperties properties, IndieAuthTokenResponse tokens)
+    {
+        using (var user = JsonDocument.Parse("{}"))
+        {
+            var context = new IndieAuthCreatingTicketContext(new ClaimsPrincipal(identity), properties, Context, Scheme, Options, Backchannel, tokens, user.RootElement);
+            await Events.CreatingTicket(context);
+            return new AuthenticationTicket(context.Principal!, context.Properties, Scheme.Name);
+        }
+    }
+
+    /// <inheritdoc />
+    protected override async Task HandleChallengeAsync(AuthenticationProperties properties)
+    {
+        var domain = properties.GetParameter<string>(IndieAuthChallengeProperties.MeKey);
+
+        if (string.IsNullOrEmpty(domain) || !Uri.IsWellFormedUriString(domain, UriKind.Absolute))
+        {
+            var failure = new AuthenticationFailureException("Domain is not specified or otherwise invalid");
+            await Events.RemoteFailure(new RemoteFailureContext(Context, Scheme, Options, failure)
+            {
+                Failure = failure,
+            });
+            return;
+        }
+
+        if (string.IsNullOrEmpty(properties.RedirectUri))
+        {
+            properties.RedirectUri = OriginalPathBase + OriginalPath + Request.QueryString;
+        }
+
+        // OAuth2 10.12 CSRF
+        GenerateCorrelationId(properties);
+
+        var authorizeEndpoint = await DiscoverIndieAuthEndpoints(properties);
+
+        if (!authorizeEndpoint.success)
+        {
+            var failure = new AuthenticationFailureException($"Unable to load IndieAuth authorization endpoint for domain '{properties.GetParameter<string>(IndieAuthChallengeProperties.MeKey)}'");
+            await Events.RemoteFailure(new RemoteFailureContext(Context, Scheme, Options, failure)
+            {
+                Failure = failure,
+            });
+            return;
+        }
+
+        var authorizationEndpoint = BuildChallengeUrl(authorizeEndpoint.authEndpoint, properties, BuildRedirectUri(Options.CallbackPath));
+
+        var redirectContext = new RedirectContext<IndieAuthOptions>(
+            Context, Scheme, Options,
+            properties, authorizationEndpoint);
+        await Events.RedirectToAuthorizationEndpoint(redirectContext);
+
+    }
+
+    public virtual async Task<(bool success, string authEndpoint, string tokenEndpoint)> DiscoverIndieAuthEndpoints(AuthenticationProperties properties)
+    {
+
+        //Discover IndieAuth endpoint
+        var response = await Options.Backchannel.GetAsync(properties.GetParameter<string>(IndieAuthChallengeProperties.MeKey));
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var failure = new AuthenticationFailureException($"Cannot load webpage at domain '{properties.GetParameter<string>(IndieAuthChallengeProperties.MeKey)}'");
+            await Events.RemoteFailure(new RemoteFailureContext(Context, Scheme, Options, failure)
+            {
+                Failure = failure,
+            });
+            return (false, String.Empty, String.Empty);
+        }
+
+        //Parse for the IndieAuth endpoint
+        var result = new Mf2().Parse(await response.Content.ReadAsStringAsync());
+
+        if (result.Rels.ContainsKey("indieauth-metadata"))
+        {
+            var metadataResponse = await Options.Backchannel.GetAsync(result.Rels["indieauth-metadata"].First());
+            if (!metadataResponse.IsSuccessStatusCode)
+            {
+                var failure = new AuthenticationFailureException($"Cannot load IndieAuth metadata '{result.Rels["indieauth-metadata"].First()}'");
+                await Events.RemoteFailure(new RemoteFailureContext(Context, Scheme, Options, failure)
+                {
+                    Failure = failure,
+                });
+                return (false, String.Empty, String.Empty);
+            }
+
+            var metadata = JsonSerializer.Deserialize<IndieAuthServerMetadataResponse>(await metadataResponse.Content.ReadAsStreamAsync(), new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = new SnakeCaseNamingPolicy()
+            });
+
+            if (Uri.IsWellFormedUriString(metadata?.AuthorizationEndpoint, UriKind.Absolute))
+                return (true, metadata.AuthorizationEndpoint, metadata.TokenEndpoint);
+            return (false, String.Empty, String.Empty);
+        }
+
+        var authEndpoint = result.Rels.ContainsKey("authorization_endpoint") && Uri.IsWellFormedUriString(result.Rels["authorization_endpoint"].First(), UriKind.Absolute) ? result.Rels["authorization_endpoint"].First() : String.Empty;
+        var tokenEndpoint = result.Rels.ContainsKey("token_endpoint") && Uri.IsWellFormedUriString(result.Rels["token_endpoint"].First(), UriKind.Absolute) ? result.Rels["token_endpoint"].First() : String.Empty;
+
+        return (!string.IsNullOrEmpty(authEndpoint) && !string.IsNullOrEmpty(tokenEndpoint), authEndpoint, tokenEndpoint);
+    }
+
+    /// <summary>
+    /// Constructs the IndieAuth challenge url.
+    /// </summary>
+    /// <param name="properties">The <see cref="AuthenticationProperties"/>.</param>
+    /// <param name="redirectUri">The url to redirect to once the challenge is completed.</param>
+    /// <returns>The challenge url.</returns>
+    protected virtual string BuildChallengeUrl(string authorizeEndpoint, AuthenticationProperties properties, string redirectUri)
+    {
+        var scopeParameter = properties.GetParameter<ICollection<string>>(IndieAuthChallengeProperties.ScopeKey);
+        var scope = scopeParameter != null ? FormatScope(scopeParameter) : FormatScope();
+
+        var parameters = new Dictionary<string, string>
+            {
+                { "client_id", Options.ClientId },
+                { "scope", scope },
+                { "response_type", "code" },
+                { "redirect_uri", redirectUri },
+            };
+
+        var bytes = new byte[32];
+        RandomNumberGenerator.Fill(bytes);
+        var codeVerifier = Microsoft.AspNetCore.Authentication.Base64UrlTextEncoder.Encode(bytes);
+
+        // Store this for use during the code redemption.
+        properties.Items.Add(IndieAuthConstants.CodeVerifierKey, codeVerifier);
+
+        var challengeBytes = SHA256.HashData(Encoding.UTF8.GetBytes(codeVerifier));
+        var codeChallenge = WebEncoders.Base64UrlEncode(challengeBytes);
+
+        parameters[IndieAuthConstants.CodeChallengeKey] = codeChallenge;
+        parameters[IndieAuthConstants.CodeChallengeMethodKey] = IndieAuthConstants.CodeChallengeMethodS256;
+
+        parameters["state"] = Options.StateDataFormat.Protect(properties);
+        parameters["me"] = properties.GetParameter<string>(IndieAuthChallengeProperties.MeKey);
+
+        return QueryHelpers.AddQueryString(authorizeEndpoint, parameters!);
+    }
+
+    /// <summary>
+    /// Format a list of OAuth scopes.
+    /// </summary>
+    /// <param name="scopes">List of scopes.</param>
+    /// <returns>Formatted scopes.</returns>
+    protected virtual string FormatScope(IEnumerable<string> scopes)
+        => string.Join(" ", scopes); // OAuth2 3.3 space separated
+
+    /// <summary>
+    /// Format the <see cref="OAuthOptions.Scope"/> property.
+    /// </summary>
+    /// <returns>Formatted scopes.</returns>
+    /// <remarks>Subclasses should rather override <see cref="FormatScope(IEnumerable{string})"/>.</remarks>
+    protected virtual string FormatScope()
+        => FormatScope(Options.Scope);
 }
