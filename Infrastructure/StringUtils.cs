@@ -23,100 +23,95 @@
 // OTHER DEALINGS IN THE SOFTWARE.
 #endregion
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 
-namespace IndieAuth.Infrastructure
+namespace AspNet.Security.IndieAuth.Infrastructure;
+
+/// <summary>
+/// ToSnakeCase algorthim from <see href="https://github.com/JamesNK/Newtonsoft.Json/blob/7b8c3b0ed0380cf76d66894e81bf4d4d5b0bd796/Src/Newtonsoft.Json/Utilities/StringUtils.cs#L200-L276">Newtonsoft.Json</see>
+/// </summary>
+public static class StringUtils
 {
-    /// <summary>
-    /// ToSnakeCase algorthim from <see href="https://github.com/JamesNK/Newtonsoft.Json/blob/7b8c3b0ed0380cf76d66894e81bf4d4d5b0bd796/Src/Newtonsoft.Json/Utilities/StringUtils.cs#L200-L276">Newtonsoft.Json</see>
-    /// </summary>
-    public static class StringUtils
+    internal enum SnakeCaseState
     {
-        internal enum SnakeCaseState
+        Start,
+        Lower,
+        Upper,
+        NewWord
+    }
+
+    /// <summary>
+    /// Convert a string to snake case.
+    /// </summary>
+    /// <param name="s"></param>
+    /// <returns></returns>
+    public static string ToSnakeCase(string s)
+    {
+        if (string.IsNullOrEmpty(s))
         {
-            Start,
-            Lower,
-            Upper,
-            NewWord
+            return s;
         }
 
-        /// <summary>
-        /// Convert a string to snake case.
-        /// </summary>
-        /// <param name="s"></param>
-        /// <returns></returns>
-        public static string ToSnakeCase(string s)
+        StringBuilder sb = new();
+        SnakeCaseState state = SnakeCaseState.Start;
+
+        for (int i = 0; i < s.Length; i++)
         {
-            if (string.IsNullOrEmpty(s))
+            if (s[i] == ' ')
             {
-                return s;
-            }
-
-            StringBuilder sb = new StringBuilder();
-            SnakeCaseState state = SnakeCaseState.Start;
-
-            for (int i = 0; i < s.Length; i++)
-            {
-                if (s[i] == ' ')
+                if (state != SnakeCaseState.Start)
                 {
-                    if (state != SnakeCaseState.Start)
-                    {
-                        state = SnakeCaseState.NewWord;
-                    }
+                    state = SnakeCaseState.NewWord;
                 }
-                else if (char.IsUpper(s[i]))
+            }
+            else if (char.IsUpper(s[i]))
+            {
+                switch (state)
                 {
-                    switch (state)
-                    {
-                        case SnakeCaseState.Upper:
-                            bool hasNext = (i + 1 < s.Length);
-                            if (i > 0 && hasNext)
+                    case SnakeCaseState.Upper:
+                        bool hasNext = (i + 1 < s.Length);
+                        if (i > 0 && hasNext)
+                        {
+                            char nextChar = s[i + 1];
+                            if (!char.IsUpper(nextChar) && nextChar != '_')
                             {
-                                char nextChar = s[i + 1];
-                                if (!char.IsUpper(nextChar) && nextChar != '_')
-                                {
-                                    sb.Append('_');
-                                }
+                                sb.Append('_');
                             }
-                            break;
-                        case SnakeCaseState.Lower:
-                        case SnakeCaseState.NewWord:
-                            sb.Append('_');
-                            break;
-                    }
+                        }
+                        break;
+                    case SnakeCaseState.Lower:
+                    case SnakeCaseState.NewWord:
+                        sb.Append('_');
+                        break;
+                }
 
-                    char c;
+                char c;
 #if HAVE_CHAR_TO_LOWER_WITH_CULTURE
                     c = char.ToLower(s[i], CultureInfo.InvariantCulture);
 #else
-                    c = char.ToLowerInvariant(s[i]);
+                c = char.ToLowerInvariant(s[i]);
 #endif
-                    sb.Append(c);
+                sb.Append(c);
 
-                    state = SnakeCaseState.Upper;
-                }
-                else if (s[i] == '_')
+                state = SnakeCaseState.Upper;
+            }
+            else if (s[i] == '_')
+            {
+                sb.Append('_');
+                state = SnakeCaseState.Start;
+            }
+            else
+            {
+                if (state == SnakeCaseState.NewWord)
                 {
                     sb.Append('_');
-                    state = SnakeCaseState.Start;
                 }
-                else
-                {
-                    if (state == SnakeCaseState.NewWord)
-                    {
-                        sb.Append('_');
-                    }
 
-                    sb.Append(s[i]);
-                    state = SnakeCaseState.Lower;
-                }
+                sb.Append(s[i]);
+                state = SnakeCaseState.Lower;
             }
-
-            return sb.ToString();
         }
+
+        return sb.ToString();
     }
 }

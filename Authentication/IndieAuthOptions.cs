@@ -1,10 +1,9 @@
-﻿using IndieAuth.Events;
-using IndieAuth.Infrastructure;
+﻿using AspNet.Security.IndieAuth.Events;
+using AspNet.Security.IndieAuth.Infrastructure;
 using Microsoft.AspNetCore.Authentication;
 using System.Globalization;
-using System.Resources;
 
-namespace IndieAuth.Authentication;
+namespace AspNet.Security.IndieAuth;
 
 
 /// <summary>
@@ -28,19 +27,13 @@ public class IndieAuthOptions : RemoteAuthenticationOptions
         base.Validate();
 
         if (string.IsNullOrEmpty(ClientId))
-        {
-            throw new ArgumentException(string.Format(CultureInfo.CurrentCulture, "Client Id must be provided", nameof(ClientId)), nameof(ClientId));
-        }
+            throw new ArgumentException("Client Id must be a well formed URI string", nameof(ClientId));
 
-        if(!Uri.IsWellFormedUriString(ClientId, UriKind.Absolute))
-        {
-            throw new ArgumentException(string.Format(CultureInfo.CurrentCulture, "Client Id must be a well formed URI string", nameof(ClientId)), nameof(ClientId));
-        }
+        if (!Uri.IsWellFormedUriString(ClientId, UriKind.Absolute))
+            throw new ArgumentException("Client Id must be a well formed URI string", nameof(ClientId));
 
         if (!CallbackPath.HasValue)
-        {
-            throw new ArgumentException(string.Format(CultureInfo.CurrentCulture, "A callback path must be provided", nameof(CallbackPath)), nameof(CallbackPath));
-        }
+            throw new ArgumentException("A callback path must be provided", nameof(CallbackPath));
     }
 
     /// <summary>

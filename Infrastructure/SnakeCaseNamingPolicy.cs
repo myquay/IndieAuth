@@ -1,12 +1,11 @@
 ﻿using System.Text.Json;
 
-namespace IndieAuth.Infrastructure
+namespace AspNet.Security.IndieAuth.Infrastructure;
+
+public class SnakeCaseNamingPolicy : JsonNamingPolicy
 {
-    public class SnakeCaseNamingPolicy : JsonNamingPolicy
+    public override string ConvertName(string name)
     {
-        public override string ConvertName(string name)
-        {
-            return StringUtils.ToSnakeCase(name);
-        }
+        return StringUtils.ToSnakeCase(name);
     }
 }

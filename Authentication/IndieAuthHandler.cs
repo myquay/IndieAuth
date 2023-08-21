@@ -1,6 +1,5 @@
-﻿using IndieAuth.Events;
-using IndieAuth.Extensions;
-using IndieAuth.Infrastructure;
+﻿using AspNet.Security.IndieAuth.Events;
+using AspNet.Security.IndieAuth.Infrastructure;
 using Microformats;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.WebUtilities;
@@ -15,7 +14,7 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 
-namespace IndieAuth.Authentication;
+namespace AspNet.Security.IndieAuth;
 
 /// <summary>
 /// An authentication handler that supports IndieAuth.
@@ -137,22 +136,18 @@ public class IndieAuthHandler<TOptions> : RemoteAuthenticationHandler<TOptions> 
         var identity = new ClaimsIdentity(new[]
         {
             new Claim(IndieAuthClaims.ME, me!)
-        }, ClaimsIssuer); ;
+        }, ClaimsIssuer);
 
         if (Options.SaveTokens)
         {
             var authTokens = new List<AuthenticationToken>();
 
-            authTokens.Add(new AuthenticationToken { Name = "access_token", Value = tokens.AccessToken });
+            if (!string.IsNullOrEmpty(tokens.AccessToken))
+                authTokens.Add(new AuthenticationToken { Name = "access_token", Value = tokens.AccessToken });
             if (!string.IsNullOrEmpty(tokens.RefreshToken))
-            {
                 authTokens.Add(new AuthenticationToken { Name = "refresh_token", Value = tokens.RefreshToken });
-            }
-
             if (!string.IsNullOrEmpty(tokens.TokenType))
-            {
                 authTokens.Add(new AuthenticationToken { Name = "token_type", Value = tokens.TokenType });
-            }
 
             if (!string.IsNullOrEmpty(tokens.ExpiresIn))
             {
@@ -243,12 +238,11 @@ public class IndieAuthHandler<TOptions> : RemoteAuthenticationHandler<TOptions> 
     /// <returns>The <see cref="AuthenticationTicket"/>.</returns>
     protected virtual async Task<AuthenticationTicket> CreateTicketAsync(ClaimsIdentity identity, AuthenticationProperties properties, IndieAuthTokenResponse tokens)
     {
-        using (var user = JsonDocument.Parse("{}"))
-        {
-            var context = new IndieAuthCreatingTicketContext(new ClaimsPrincipal(identity), properties, Context, Scheme, Options, Backchannel, tokens, user.RootElement);
-            await Events.CreatingTicket(context);
-            return new AuthenticationTicket(context.Principal!, context.Properties, Scheme.Name);
-        }
+        using var user = JsonDocument.Parse("{}");
+
+        var context = new IndieAuthCreatingTicketContext(new ClaimsPrincipal(identity), properties, Context, Scheme, Options, Backchannel, tokens, user.RootElement);
+        await Events.CreatingTicket(context);
+        return new AuthenticationTicket(context.Principal!, context.Properties, Scheme.Name);
     }
 
     /// <inheritdoc />
@@ -273,10 +267,9 @@ public class IndieAuthHandler<TOptions> : RemoteAuthenticationHandler<TOptions> 
 
         // OAuth2 10.12 CSRF
         GenerateCorrelationId(properties);
+        var (success, authEndpoint, _) = await DiscoverIndieAuthEndpoints(properties);
 
-        var authorizeEndpoint = await DiscoverIndieAuthEndpoints(properties);
-
-        if (!authorizeEndpoint.success)
+        if (!success)
         {
             var failure = new AuthenticationFailureException($"Unable to load IndieAuth authorization endpoint for domain '{properties.GetParameter<string>(IndieAuthChallengeProperties.MeKey)}'");
             await Events.RemoteFailure(new RemoteFailureContext(Context, Scheme, Options, failure)
@@ -286,7 +279,7 @@ public class IndieAuthHandler<TOptions> : RemoteAuthenticationHandler<TOptions> 
             return;
         }
 
-        var authorizationEndpoint = BuildChallengeUrl(authorizeEndpoint.authEndpoint, properties, BuildRedirectUri(Options.CallbackPath));
+        var authorizationEndpoint = BuildChallengeUrl(authEndpoint, properties, BuildRedirectUri(Options.CallbackPath));
 
         var redirectContext = new RedirectContext<IndieAuthOptions>(
             Context, Scheme, Options,

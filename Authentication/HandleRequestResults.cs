@@ -1,14 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authentication;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
-namespace IndieAuth.Authentication
+namespace AspNet.Security.IndieAuth;
+internal static class HandleRequestResults
 {
-    internal static class HandleRequestResults
-    {
-        internal static HandleRequestResult InvalidState = HandleRequestResult.Fail("The indieauth state was missing or invalid.");
-    }
+    internal static HandleRequestResult InvalidState = HandleRequestResult.Fail("The IndieAuth state was missing or invalid.");
 }
