@@ -1,0 +1,47 @@
+﻿name: Build IndieAuth library
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+    - main
+  pull_request:
+    branches:
+    - main
+jobs:
+  build:
+    name: Build IndieAuth library
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: 📄 Checkout
+      uses: actions/checkout@v3
+
+    - name: 🛠️ Setup .NET SDK
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: '6.0.x'
+
+    - name: 🛠️ Restore NuGet packages
+      run: dotnet restore
+      
+    - name: 🚀 Build Solution
+      run: dotnet build --configuration Release
+      
+    - name: 👟 Run tests
+      run: dotnet test
+      
+    - name: 📦 Pack NuGet package
+      run: dotnet pack --configuration Release
+
+    - name: 💾 Archive package
+      uses: actions/upload-artifact@v3
+      with:
+        name: nuget-package
+        path: ${{github.workspace}}/**/AspNet.Security.IndieAuth.*.nupkg
+
+    - name: 💾 Archive symbols package
+      uses: actions/upload-artifact@v3
+      with:
+        name: nuget-package
+        path: ${{github.workspace}}/**/AspNet.Security.IndieAuth.*.snupkg
