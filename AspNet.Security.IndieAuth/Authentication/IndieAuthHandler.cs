@@ -310,9 +310,24 @@ public class IndieAuthHandler<TOptions> : RemoteAuthenticationHandler<TOptions> 
             return (false, string.Empty, string.Empty);
         }
 
-        // Use the discovery service for the actual discovery logic
-        var discoveryService = new IndieAuthDiscoveryService(Options.Backchannel, Logger);
-        var result = await discoveryService.DiscoverEndpointsAsync(profileUrl);
+        // Get or create the discovery cache
+        var cache = Options.CacheDiscoveryResults 
+            ? (Options.DiscoveryCache ?? GetOrCreateDefaultCache())
+            : null;
+
+        // Use the discovery service with caching and options
+        var discoveryService = new IndieAuthDiscoveryService(
+            Options.Backchannel, 
+            Logger,
+            cache,
+            Options.DiscoveryCacheExpiration);
+
+        var discoveryOptions = new DiscoveryOptions
+        {
+            UseHeadRequest = Options.UseHeadRequestForDiscovery
+        };
+
+        var result = await discoveryService.DiscoverEndpointsAsync(profileUrl, discoveryOptions);
 
         if (!result.Success)
         {
@@ -325,6 +340,22 @@ public class IndieAuthHandler<TOptions> : RemoteAuthenticationHandler<TOptions> 
         }
 
         return (true, result.AuthorizationEndpoint, result.TokenEndpoint);
+    }
+
+    // Lazy-initialized default cache shared across handler instances
+    private static IDiscoveryCache? _defaultCache;
+    private static readonly object _cacheLock = new();
+
+    private static IDiscoveryCache GetOrCreateDefaultCache()
+    {
+        if (_defaultCache == null)
+        {
+            lock (_cacheLock)
+            {
+                _defaultCache ??= new InMemoryDiscoveryCache();
+            }
+        }
+        return _defaultCache;
     }
 
     /// <summary>

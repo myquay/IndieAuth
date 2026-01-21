@@ -36,7 +36,10 @@ public class MockHttpMessageHandler : HttpMessageHandler
     /// <summary>
     /// Queues a response with Link headers.
     /// </summary>
-    public void QueueResponseWithLinkHeader(System.Net.HttpStatusCode statusCode, string content, params string[] linkHeaders)
+    public void QueueResponseWithLinkHeader(
+        System.Net.HttpStatusCode statusCode, 
+        string content, 
+        params string[] linkHeaders)
     {
         var response = new HttpResponseMessage(statusCode)
         {
@@ -48,6 +51,26 @@ public class MockHttpMessageHandler : HttpMessageHandler
             response.Headers.TryAddWithoutValidation("Link", linkHeader);
         }
 
+        _responses.Enqueue(response);
+    }
+
+    /// <summary>
+    /// Queues a response with Link headers, optionally for a HEAD request (empty body).
+    /// </summary>
+    public void QueueResponseWithLinkHeader(
+        System.Net.HttpStatusCode statusCode,
+        string content,
+        string linkHeader,
+        bool isHeadRequest)
+    {
+        var response = new HttpResponseMessage(statusCode)
+        {
+            Content = isHeadRequest 
+                ? new StringContent(string.Empty) 
+                : new StringContent(content, System.Text.Encoding.UTF8, "text/html")
+        };
+
+        response.Headers.TryAddWithoutValidation("Link", linkHeader);
         _responses.Enqueue(response);
     }
 

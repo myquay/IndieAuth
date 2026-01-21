@@ -60,6 +60,36 @@ internal static class Log
         LoggerMessage.Define<string>(LogLevel.Warning, new EventId(13, nameof(MetadataParsingFailed)),
             "Failed to parse IndieAuth metadata from {MetadataUrl}");
 
+    // Cache-related logging
+    private static readonly Action<ILogger, string, Exception?> _discoveryCacheHit =
+        LoggerMessage.Define<string>(LogLevel.Debug, new EventId(14, nameof(DiscoveryCacheHit)),
+            "Discovery cache hit for {ProfileUrl}");
+
+    private static readonly Action<ILogger, string, Exception?> _discoveryCacheMiss =
+        LoggerMessage.Define<string>(LogLevel.Debug, new EventId(15, nameof(DiscoveryCacheMiss)),
+            "Discovery cache miss for {ProfileUrl}");
+
+    private static readonly Action<ILogger, string, TimeSpan, Exception?> _discoveryResultCached =
+        LoggerMessage.Define<string, TimeSpan>(LogLevel.Debug, new EventId(16, nameof(DiscoveryResultCached)),
+            "Cached discovery result for {ProfileUrl} with expiration {Expiration}");
+
+    // HEAD request optimization logging
+    private static readonly Action<ILogger, string, Exception?> _headRequestStarted =
+        LoggerMessage.Define<string>(LogLevel.Debug, new EventId(17, nameof(HeadRequestStarted)),
+            "Starting HEAD request for {ProfileUrl}");
+
+    private static readonly Action<ILogger, string, Exception?> _headRequestFailed =
+        LoggerMessage.Define<string>(LogLevel.Debug, new EventId(18, nameof(HeadRequestFailed)),
+            "HEAD request failed for {ProfileUrl}, falling back to GET");
+
+    private static readonly Action<ILogger, string, Exception?> _headRequestFoundMetadata =
+        LoggerMessage.Define<string>(LogLevel.Debug, new EventId(19, nameof(HeadRequestFoundMetadata)),
+            "HEAD request found indieauth-metadata in Link header: {MetadataUrl}");
+
+    private static readonly Action<ILogger, string, Exception?> _headRequestFallbackToGet =
+        LoggerMessage.Define<string>(LogLevel.Debug, new EventId(20, nameof(HeadRequestFallbackToGet)),
+            "HEAD request found no Link headers for {ProfileUrl}, falling back to GET");
+
     internal static void DiscoveryStarted(ILogger logger, string? profileUrl)
         => _discoveryStarted(logger, profileUrl, null);
 
@@ -98,4 +128,25 @@ internal static class Log
 
     internal static void MetadataParsingFailed(ILogger logger, Exception exception, string metadataUrl)
         => _metadataParsingFailed(logger, metadataUrl, exception);
+
+    internal static void DiscoveryCacheHit(ILogger logger, string profileUrl)
+        => _discoveryCacheHit(logger, profileUrl, null);
+
+    internal static void DiscoveryCacheMiss(ILogger logger, string profileUrl)
+        => _discoveryCacheMiss(logger, profileUrl, null);
+
+    internal static void DiscoveryResultCached(ILogger logger, string profileUrl, TimeSpan expiration)
+        => _discoveryResultCached(logger, profileUrl, expiration, null);
+
+    internal static void HeadRequestStarted(ILogger logger, string profileUrl)
+        => _headRequestStarted(logger, profileUrl, null);
+
+    internal static void HeadRequestFailed(ILogger logger, string profileUrl)
+        => _headRequestFailed(logger, profileUrl, null);
+
+    internal static void HeadRequestFoundMetadata(ILogger logger, string metadataUrl)
+        => _headRequestFoundMetadata(logger, metadataUrl, null);
+
+    internal static void HeadRequestFallbackToGet(ILogger logger, string profileUrl)
+        => _headRequestFallbackToGet(logger, profileUrl, null);
 }
