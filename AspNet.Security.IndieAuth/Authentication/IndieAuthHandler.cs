@@ -1,6 +1,5 @@
 ﻿using AspNet.Security.IndieAuth.Events;
 using AspNet.Security.IndieAuth.Infrastructure;
-using Microformats;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Logging;
@@ -129,7 +128,6 @@ public class IndieAuthHandler<TOptions> : RemoteAuthenticationHandler<TOptions> 
 
         if (!string.Equals(returnedMe?.Canonicalize(), me?.Canonicalize(), StringComparison.OrdinalIgnoreCase))
         {
-            //TODO: HANDLE OTHER CASES AS DETAILED HERE: https://indieauth.spec.indieweb.org/#example-6
             return HandleRequestResult.Fail("Returned me value does not match the me value from the challenge.", properties);
         }
 
@@ -288,52 +286,45 @@ public class IndieAuthHandler<TOptions> : RemoteAuthenticationHandler<TOptions> 
 
     }
 
+    /// <summary>
+    /// Discovers the IndieAuth authorization and token endpoints for the user's profile URL.
+    /// </summary>
+    /// <remarks>
+    /// Discovery follows the precedence defined in IndieAuth spec Section 4.1:
+    /// 1. HTTP Link header with rel="indieauth-metadata"
+    /// 2. HTML &lt;link&gt; element with rel="indieauth-metadata"
+    /// 3. Legacy: HTTP Link header with rel="authorization_endpoint" and rel="token_endpoint"
+    /// 4. Legacy: HTML &lt;link&gt; elements with rel="authorization_endpoint" and rel="token_endpoint"
+    /// </remarks>
     public virtual async Task<(bool success, string authEndpoint, string tokenEndpoint)> DiscoverIndieAuthEndpoints(AuthenticationProperties properties)
     {
-
-        //Discover IndieAuth endpoint
-        var response = await Options.Backchannel.GetAsync(properties.GetParameter<string>(IndieAuthChallengeProperties.MeKey));
-
-        if (!response.IsSuccessStatusCode)
+        var profileUrl = properties.GetParameter<string>(IndieAuthChallengeProperties.MeKey);
+        
+        if (string.IsNullOrEmpty(profileUrl))
         {
-            var failure = new AuthenticationFailureException($"Cannot load webpage at domain '{properties.GetParameter<string>(IndieAuthChallengeProperties.MeKey)}'");
+            var failure = new AuthenticationFailureException("Profile URL is required for discovery");
             await Events.RemoteFailure(new RemoteFailureContext(Context, Scheme, Options, failure)
             {
                 Failure = failure,
             });
-            return (false, String.Empty, String.Empty);
+            return (false, string.Empty, string.Empty);
         }
 
-        //Parse for the IndieAuth endpoint
-        var result = new Mf2().Parse(await response.Content.ReadAsStringAsync());
+        // Use the discovery service for the actual discovery logic
+        var discoveryService = new IndieAuthDiscoveryService(Options.Backchannel, Logger);
+        var result = await discoveryService.DiscoverEndpointsAsync(profileUrl);
 
-        if (result.Rels.ContainsKey("indieauth-metadata"))
+        if (!result.Success)
         {
-            var metadataResponse = await Options.Backchannel.GetAsync(result.Rels["indieauth-metadata"].First());
-            if (!metadataResponse.IsSuccessStatusCode)
+            var failure = new AuthenticationFailureException(result.ErrorMessage ?? "Discovery failed");
+            await Events.RemoteFailure(new RemoteFailureContext(Context, Scheme, Options, failure)
             {
-                var failure = new AuthenticationFailureException($"Cannot load IndieAuth metadata '{result.Rels["indieauth-metadata"].First()}'");
-                await Events.RemoteFailure(new RemoteFailureContext(Context, Scheme, Options, failure)
-                {
-                    Failure = failure,
-                });
-                return (false, String.Empty, String.Empty);
-            }
-
-            var metadata = JsonSerializer.Deserialize<IndieAuthServerMetadataResponse>(await metadataResponse.Content.ReadAsStreamAsync(), new JsonSerializerOptions
-            {
-                PropertyNamingPolicy = new SnakeCaseNamingPolicy()
+                Failure = failure,
             });
-
-            if (Uri.IsWellFormedUriString(metadata?.AuthorizationEndpoint, UriKind.Absolute))
-                return (true, metadata.AuthorizationEndpoint, metadata.TokenEndpoint);
-            return (false, String.Empty, String.Empty);
+            return (false, string.Empty, string.Empty);
         }
 
-        var authEndpoint = result.Rels.ContainsKey("authorization_endpoint") && Uri.IsWellFormedUriString(result.Rels["authorization_endpoint"].First(), UriKind.Absolute) ? result.Rels["authorization_endpoint"].First() : String.Empty;
-        var tokenEndpoint = result.Rels.ContainsKey("token_endpoint") && Uri.IsWellFormedUriString(result.Rels["token_endpoint"].First(), UriKind.Absolute) ? result.Rels["token_endpoint"].First() : String.Empty;
-
-        return (!string.IsNullOrEmpty(authEndpoint) && !string.IsNullOrEmpty(tokenEndpoint), authEndpoint, tokenEndpoint);
+        return (true, result.AuthorizationEndpoint, result.TokenEndpoint);
     }
 
     /// <summary>
