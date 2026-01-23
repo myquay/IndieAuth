@@ -139,15 +139,66 @@ public class IndieAuthHandler<TOptions> : RemoteAuthenticationHandler<TOptions> 
             }
         }
 
-        if (!string.Equals(returnedMe?.Canonicalize(), me?.Canonicalize(), StringComparison.OrdinalIgnoreCase))
+        // Authorization Server Confirmation (Section 5.4)
+        if (Options.EnableAuthorizationServerConfirmation)
         {
-            return HandleRequestResult.Fail("Returned me value does not match the me value from the challenge.", properties);
+            var discoveryResultJson = properties.Items.TryGetValue(IndieAuthConstants.DiscoveryResultKey, out var drJson) ? drJson : null;
+            if (!string.IsNullOrEmpty(discoveryResultJson))
+            {
+                var originalDiscovery = System.Text.Json.JsonSerializer.Deserialize<DiscoveryResult>(discoveryResultJson);
+                if (originalDiscovery != null && !string.IsNullOrEmpty(returnedMe))
+                {
+                    var confirmationService = new AuthorizationServerConfirmationService(
+                        new IndieAuthDiscoveryService(Backchannel, Logger, 
+                            Options.CacheDiscoveryResults ? (Options.DiscoveryCache ?? GetOrCreateDefaultCache()) : null,
+                            Options.DiscoveryCacheExpiration),
+                        Logger);
+
+                    var canonicalizedMe = me?.Canonicalize() ?? string.Empty;
+                    var confirmationResult = await confirmationService.ConfirmAuthorizationServerAsync(
+                        originalDiscovery, returnedMe, canonicalizedMe);
+
+                    if (!confirmationResult.Success)
+                    {
+                        return HandleRequestResult.Fail(
+                            $"Authorization server confirmation failed: {confirmationResult.ErrorMessage}", properties);
+                    }
+                }
+            }
+        }
+        else
+        {
+            // Fallback to simple exact-match when confirmation is disabled
+            if (!string.Equals(returnedMe?.Canonicalize(), me?.Canonicalize(), StringComparison.OrdinalIgnoreCase))
+            {
+                return HandleRequestResult.Fail("Returned me value does not match the me value from the challenge.", properties);
+            }
         }
 
-        var identity = new ClaimsIdentity(new[]
+        // Build claims identity
+        var claims = new List<Claim>
         {
-            new Claim(IndieAuthClaims.ME, me!)
-        }, ClaimsIssuer);
+            new Claim(IndieAuthClaims.ME, returnedMe?.Canonicalize() ?? me!)
+        };
+
+        // Map profile information to claims (Section 5.3.4)
+        if (Options.MapProfileToClaims && tokens.Profile != null && tokens.Profile.HasData)
+        {
+            if (!string.IsNullOrEmpty(tokens.Profile.Name))
+                claims.Add(new Claim(IndieAuthClaimTypes.Name, tokens.Profile.Name));
+            if (!string.IsNullOrEmpty(tokens.Profile.Photo))
+                claims.Add(new Claim(IndieAuthClaimTypes.Picture, tokens.Profile.Photo));
+            if (!string.IsNullOrEmpty(tokens.Profile.Url))
+                claims.Add(new Claim(IndieAuthClaimTypes.Website, tokens.Profile.Url));
+            if (!string.IsNullOrEmpty(tokens.Profile.Email))
+            {
+                claims.Add(new Claim(IndieAuthClaimTypes.Email, tokens.Profile.Email));
+                // Per spec: profile data is informational only, email is not verified
+                claims.Add(new Claim(IndieAuthClaimTypes.EmailVerified, "false"));
+            }
+        }
+
+        var identity = new ClaimsIdentity(claims, ClaimsIssuer);
 
         if (Options.SaveTokens)
         {
@@ -370,6 +421,23 @@ public class IndieAuthHandler<TOptions> : RemoteAuthenticationHandler<TOptions> 
                 Failure = failure,
             });
             return (false, string.Empty, string.Empty);
+        }
+
+        // Store discovery result for Authorization Server Confirmation (Section 5.4)
+        if (Options.EnableAuthorizationServerConfirmation)
+        {
+            // Store a minimal serialized version for state transfer
+            var discoveryData = new
+            {
+                result.Success,
+                result.AuthorizationEndpoint,
+                result.TokenEndpoint,
+                result.Issuer,
+                result.DiscoveredUrls,
+                result.OriginalUrl
+            };
+            properties.Items[IndieAuthConstants.DiscoveryResultKey] = 
+                System.Text.Json.JsonSerializer.Serialize(discoveryData);
         }
 
         return (true, result.AuthorizationEndpoint, result.TokenEndpoint);

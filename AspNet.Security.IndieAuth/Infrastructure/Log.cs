@@ -95,6 +95,31 @@ internal static class Log
         LoggerMessage.Define<string, string>(LogLevel.Warning, new EventId(21, nameof(ProfileUrlValidationFailed)),
             "Profile URL validation failed for {ProfileUrl}: {Reason}");
 
+    // Authorization Server Confirmation logging
+    private static readonly Action<ILogger, string, Exception?> _authServerConfirmationExactMatch =
+        LoggerMessage.Define<string>(LogLevel.Debug, new EventId(22, nameof(AuthServerConfirmationExactMatch)),
+            "Authorization server confirmation: exact match for {ReturnedUrl}");
+
+    private static readonly Action<ILogger, string, string, Exception?> _authServerConfirmationRedirectMatch =
+        LoggerMessage.Define<string, string>(LogLevel.Debug, new EventId(23, nameof(AuthServerConfirmationRedirectMatch)),
+            "Authorization server confirmation: redirect chain match for {ReturnedUrl} (matched {DiscoveredUrl})");
+
+    private static readonly Action<ILogger, string, Exception?> _authServerConfirmationReDiscovery =
+        LoggerMessage.Define<string>(LogLevel.Debug, new EventId(24, nameof(AuthServerConfirmationReDiscovery)),
+            "Authorization server confirmation: performing re-discovery for {ReturnedUrl}");
+
+    private static readonly Action<ILogger, string, string?, Exception?> _authServerConfirmationReDiscoveryFailed =
+        LoggerMessage.Define<string, string?>(LogLevel.Warning, new EventId(25, nameof(AuthServerConfirmationReDiscoveryFailed)),
+            "Authorization server confirmation: re-discovery failed for {ReturnedUrl}: {Error}");
+
+    private static readonly Action<ILogger, string, string, Exception?> _authServerConfirmationReDiscoverySuccess =
+        LoggerMessage.Define<string, string>(LogLevel.Debug, new EventId(26, nameof(AuthServerConfirmationReDiscoverySuccess)),
+            "Authorization server confirmation: re-discovery confirmed same auth endpoint for {ReturnedUrl}: {AuthEndpoint}");
+
+    private static readonly Action<ILogger, string, string, string, Exception?> _authServerConfirmationMismatch =
+        LoggerMessage.Define<string, string, string>(LogLevel.Warning, new EventId(27, nameof(AuthServerConfirmationMismatch)),
+            "Authorization server confirmation: endpoint mismatch for {ReturnedUrl}. Original: {OriginalEndpoint}, Returned: {ReturnedEndpoint}");
+
     internal static void DiscoveryStarted(ILogger logger, string? profileUrl)
         => _discoveryStarted(logger, profileUrl, null);
 
@@ -157,4 +182,22 @@ internal static class Log
 
     internal static void ProfileUrlValidationFailed(ILogger logger, string profileUrl, string reason)
         => _profileUrlValidationFailed(logger, profileUrl, reason, null);
+
+    internal static void AuthServerConfirmationExactMatch(ILogger logger, string returnedUrl)
+        => _authServerConfirmationExactMatch(logger, returnedUrl, null);
+
+    internal static void AuthServerConfirmationRedirectMatch(ILogger logger, string returnedUrl, string discoveredUrl)
+        => _authServerConfirmationRedirectMatch(logger, returnedUrl, discoveredUrl, null);
+
+    internal static void AuthServerConfirmationReDiscovery(ILogger logger, string returnedUrl)
+        => _authServerConfirmationReDiscovery(logger, returnedUrl, null);
+
+    internal static void AuthServerConfirmationReDiscoveryFailed(ILogger logger, string returnedUrl, string? error)
+        => _authServerConfirmationReDiscoveryFailed(logger, returnedUrl, error, null);
+
+    internal static void AuthServerConfirmationReDiscoverySuccess(ILogger logger, string returnedUrl, string authEndpoint)
+        => _authServerConfirmationReDiscoverySuccess(logger, returnedUrl, authEndpoint, null);
+
+    internal static void AuthServerConfirmationMismatch(ILogger logger, string returnedUrl, string originalEndpoint, string returnedEndpoint)
+        => _authServerConfirmationMismatch(logger, returnedUrl, originalEndpoint, returnedEndpoint, null);
 }

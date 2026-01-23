@@ -25,6 +25,13 @@ public class IndieAuthTokenResponse : IDisposable
             ExpiresIn = expiresIn.GetString();
 
         Me = root.GetProperty("me").GetString();
+        
+        // Parse profile information (Section 5.3.4)
+        if (root.TryGetProperty("profile", out var profileElement))
+        {
+            Profile = ParseProfile(profileElement);
+        }
+
         Error = GetStandardErrorException(response);
     }
 
@@ -94,9 +101,38 @@ public class IndieAuthTokenResponse : IDisposable
     public string? ExpiresIn { get; set; }
 
     /// <summary>
+    /// Gets or sets the user's profile information (Section 5.3.4).
+    /// Only present if 'profile' scope was requested and granted.
+    /// This data is informational only and MUST NOT be used for authentication.
+    /// </summary>
+    public IndieAuthProfile? Profile { get; set; }
+
+    /// <summary>
     /// The exception in the event the response was a failure.
     /// </summary>
     public Exception? Error { get; set; }
+
+    /// <summary>
+    /// Parses the profile object from the JSON response.
+    /// </summary>
+    private static IndieAuthProfile? ParseProfile(JsonElement profileElement)
+    {
+        if (profileElement.ValueKind != JsonValueKind.Object)
+            return null;
+
+        string? name = null, url = null, photo = null, email = null;
+
+        if (profileElement.TryGetProperty("name", out var nameEl))
+            name = nameEl.GetString();
+        if (profileElement.TryGetProperty("url", out var urlEl))
+            url = urlEl.GetString();
+        if (profileElement.TryGetProperty("photo", out var photoEl))
+            photo = photoEl.GetString();
+        if (profileElement.TryGetProperty("email", out var emailEl))
+            email = emailEl.GetString();
+
+        return new IndieAuthProfile(name, url, photo, email);
+    }
 
     internal static Exception? GetStandardErrorException(JsonDocument response)
     {

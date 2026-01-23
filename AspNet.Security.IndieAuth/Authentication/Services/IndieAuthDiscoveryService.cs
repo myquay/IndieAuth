@@ -33,6 +33,7 @@ public record DiscoveryResult(
     string AuthorizationEndpoint,
     string TokenEndpoint,
     string? ErrorMessage = null,
+    
     // Enhanced fields
     string? Issuer = null,
     string? UserinfoEndpoint = null,
@@ -41,7 +42,15 @@ public record DiscoveryResult(
     IReadOnlyList<string>? ScopesSupported = null,
     IReadOnlyList<string>? CodeChallengeMethods = null,
     DiscoveryMethod Method = DiscoveryMethod.Unknown,
-    DateTimeOffset? DiscoveredAt = null);
+    DateTimeOffset? DiscoveredAt = null,
+
+    // List of all URLs encountered during discovery, including the initial URL,
+    // any redirect chain URLs, and the final resolved URL.
+    // Used for Authorization Server Confirmation (Section 5.4).
+    IReadOnlyList<string>? DiscoveredUrls = null,
+    
+    // The original URL that was entered (before canonicalization).
+    string? OriginalUrl = null);
 
 /// <summary>
 /// Options for configuring discovery behavior.
@@ -202,6 +211,8 @@ public class IndieAuthDiscoveryService
 
     private async Task<DiscoveryResult> PerformGetDiscoveryAsync(string profileUrl)
     {
+        var discoveredUrls = new List<string> { profileUrl };
+        
         HttpResponseMessage response;
         try
         {
@@ -219,6 +230,14 @@ public class IndieAuthDiscoveryService
         }
 
         var baseUri = response.RequestMessage?.RequestUri ?? new Uri(profileUrl);
+        var finalUrl = baseUri.ToString();
+        
+        // Track the final URL if different from initial (redirect occurred)
+        if (!string.Equals(profileUrl, finalUrl, StringComparison.OrdinalIgnoreCase))
+        {
+            discoveredUrls.Add(finalUrl);
+        }
+        
         Log.ProfileResolved(_logger, baseUri);
 
         var linkHeaders = response.Headers.TryGetValues("Link", out var linkValues)
@@ -232,7 +251,7 @@ public class IndieAuthDiscoveryService
         if (!string.IsNullOrEmpty(metadataUrl))
         {
             Log.MetadataFoundInLinkHeader(_logger, metadataUrl);
-            return await FetchMetadataAndExtractEndpoints(metadataUrl, DiscoveryMethod.MetadataLinkHeader);
+            return await FetchMetadataAndExtractEndpoints(metadataUrl, DiscoveryMethod.MetadataLinkHeader, discoveredUrls, profileUrl);
         }
 
         // 2. Check HTML <link> elements for indieauth-metadata
@@ -243,7 +262,7 @@ public class IndieAuthDiscoveryService
             var htmlMetadataUrl = mf2Result.Rels["indieauth-metadata"].First();
             var resolvedMetadataUrl = LinkHeaderParser.ResolveUrl(htmlMetadataUrl, baseUri);
             Log.MetadataFoundInHtml(_logger, resolvedMetadataUrl);
-            return await FetchMetadataAndExtractEndpoints(resolvedMetadataUrl, DiscoveryMethod.MetadataHtmlLink);
+            return await FetchMetadataAndExtractEndpoints(resolvedMetadataUrl, DiscoveryMethod.MetadataHtmlLink, discoveredUrls, profileUrl);
         }
 
         // 3. Legacy fallback: Check HTTP Link header for authorization_endpoint and token_endpoint
@@ -253,7 +272,8 @@ public class IndieAuthDiscoveryService
         if (!string.IsNullOrEmpty(authEndpointFromHeader) && !string.IsNullOrEmpty(tokenEndpointFromHeader))
         {
             Log.LegacyEndpointsFoundInLinkHeaders(_logger, authEndpointFromHeader, tokenEndpointFromHeader);
-            return CreateResult(true, authEndpointFromHeader, tokenEndpointFromHeader, method: DiscoveryMethod.LegacyLinkHeader);
+            return CreateResult(true, authEndpointFromHeader, tokenEndpointFromHeader, 
+                method: DiscoveryMethod.LegacyLinkHeader, discoveredUrls: discoveredUrls, originalUrl: profileUrl);
         }
 
         // 4. Legacy fallback: Check HTML <link> elements for authorization_endpoint and token_endpoint
@@ -267,14 +287,19 @@ public class IndieAuthDiscoveryService
         if (!string.IsNullOrEmpty(authEndpointFromHtml) && !string.IsNullOrEmpty(tokenEndpointFromHtml))
         {
             Log.LegacyEndpointsFoundInHtml(_logger, authEndpointFromHtml, tokenEndpointFromHtml);
-            return CreateResult(true, authEndpointFromHtml, tokenEndpointFromHtml, method: DiscoveryMethod.LegacyHtmlLink);
+            return CreateResult(true, authEndpointFromHtml, tokenEndpointFromHtml, 
+                method: DiscoveryMethod.LegacyHtmlLink, discoveredUrls: discoveredUrls, originalUrl: profileUrl);
         }
 
         Log.NoEndpointsFound(_logger, profileUrl);
         return new DiscoveryResult(false, string.Empty, string.Empty, "No IndieAuth endpoints found");
     }
 
-    private async Task<DiscoveryResult> FetchMetadataAndExtractEndpoints(string metadataUrl, DiscoveryMethod method)
+    private async Task<DiscoveryResult> FetchMetadataAndExtractEndpoints(
+        string metadataUrl, 
+        DiscoveryMethod method,
+        IReadOnlyList<string>? discoveredUrls = null,
+        string? originalUrl = null)
     {
         Log.FetchingMetadata(_logger, metadataUrl);
 
@@ -318,7 +343,9 @@ public class IndieAuthDiscoveryService
                     ScopesSupported: metadata.ScopesSupported?.ToList(),
                     CodeChallengeMethods: metadata.CodeChallengeMethodsSupported?.ToList(),
                     Method: method,
-                    DiscoveredAt: DateTimeOffset.UtcNow);
+                    DiscoveredAt: DateTimeOffset.UtcNow,
+                    DiscoveredUrls: discoveredUrls,
+                    OriginalUrl: originalUrl);
             }
 
             Log.MetadataMissingEndpoints(_logger);
@@ -346,7 +373,9 @@ public class IndieAuthDiscoveryService
         string authEndpoint,
         string tokenEndpoint,
         string? errorMessage = null,
-        DiscoveryMethod method = DiscoveryMethod.Unknown)
+        DiscoveryMethod method = DiscoveryMethod.Unknown,
+        IReadOnlyList<string>? discoveredUrls = null,
+        string? originalUrl = null)
     {
         return new DiscoveryResult(
             Success: success,
@@ -354,6 +383,8 @@ public class IndieAuthDiscoveryService
             TokenEndpoint: tokenEndpoint,
             ErrorMessage: errorMessage,
             Method: method,
-            DiscoveredAt: success ? DateTimeOffset.UtcNow : null);
+            DiscoveredAt: success ? DateTimeOffset.UtcNow : null,
+            DiscoveredUrls: discoveredUrls,
+            OriginalUrl: originalUrl);
     }
 }

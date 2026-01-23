@@ -24,4 +24,10 @@ public static class IndieAuthConstants
     /// S256 defined in <see href="https://tools.ietf.org/html/rfc7636"/>.
     /// </summary>
     public static readonly string CodeChallengeMethodS256 = "S256";
+
+    /// <summary>
+    /// Key for storing discovery result in authentication properties.
+    /// Used for Authorization Server Confirmation (Section 5.4).
+    /// </summary>
+    public static readonly string DiscoveryResultKey = ".discovery_result";
 }

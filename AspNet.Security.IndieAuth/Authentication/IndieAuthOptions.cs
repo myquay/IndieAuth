@@ -1,7 +1,6 @@
 ﻿using AspNet.Security.IndieAuth.Events;
 using AspNet.Security.IndieAuth.Infrastructure;
 using Microsoft.AspNetCore.Authentication;
-using System.Globalization;
 
 namespace AspNet.Security.IndieAuth;
 
@@ -111,6 +110,32 @@ public class IndieAuthOptions : RemoteAuthenticationOptions
     /// Default: true.
     /// </summary>
     public bool StrictProfileUrlValidation { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to enable Authorization Server Confirmation per IndieAuth spec section 5.4.
+    /// When enabled, the client verifies that the authorization server is authorized to make
+    /// claims about the returned 'me' URL by performing discovery on the returned URL if it
+    /// differs from the initial discovery URL.
+    /// Default: true.
+    /// </summary>
+    public bool EnableAuthorizationServerConfirmation { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to validate the 'iss' (issuer) parameter per RFC 9207.
+    /// When enabled, the client verifies that the issuer in the authorization response
+    /// matches the issuer discovered during endpoint discovery.
+    /// Only applies when metadata discovery was used (not legacy endpoints).
+    /// Default: true.
+    /// </summary>
+    public bool ValidateIssuer { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to map profile information to claims.
+    /// When enabled and the 'profile' scope is granted, user profile data
+    /// (name, photo, url, email) is mapped to OIDC-compatible claims.
+    /// Default: true.
+    /// </summary>
+    public bool MapProfileToClaims { get; set; } = true;
 
     #endregion
 }
