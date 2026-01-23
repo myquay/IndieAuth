@@ -1,4 +1,4 @@
-﻿namespace AspNet.Security.IndieAuth.Infrastructure;
+﻿﻿namespace AspNet.Security.IndieAuth.Infrastructure;
 
 /// <summary>
 /// Constants used in the IndieAuth protocol
@@ -30,4 +30,22 @@ public static class IndieAuthConstants
     /// Used for Authorization Server Confirmation (Section 5.4).
     /// </summary>
     public static readonly string DiscoveryResultKey = ".discovery_result";
+
+    /// <summary>
+    /// Key for storing the token endpoint URL in authentication properties.
+    /// Used for Token Refresh (Section 5.5).
+    /// </summary>
+    public static readonly string TokenEndpointKey = ".token_endpoint";
+
+    /// <summary>
+    /// Key for storing the issuer in authentication properties.
+    /// Used for Issuer Validation (RFC 9207).
+    /// </summary>
+    public static readonly string IssuerKey = ".issuer";
+
+    /// <summary>
+    /// Key for storing the granted scopes in authentication properties.
+    /// Used for Token Refresh scope validation.
+    /// </summary>
+    public static readonly string ScopesKey = ".scopes";
 }

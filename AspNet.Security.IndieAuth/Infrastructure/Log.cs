@@ -200,4 +200,62 @@ internal static class Log
 
     internal static void AuthServerConfirmationMismatch(ILogger logger, string returnedUrl, string originalEndpoint, string returnedEndpoint)
         => _authServerConfirmationMismatch(logger, returnedUrl, originalEndpoint, returnedEndpoint, null);
+
+    // Issuer validation logging
+    private static readonly Action<ILogger, string, string, Exception?> _issuerValidationSuccess =
+        LoggerMessage.Define<string, string>(LogLevel.Debug, new EventId(28, nameof(IssuerValidationSuccess)),
+            "Issuer validation successful: expected={ExpectedIssuer}, received={ReceivedIssuer}");
+
+    private static readonly Action<ILogger, string, string, Exception?> _issuerValidationFailed =
+        LoggerMessage.Define<string, string>(LogLevel.Warning, new EventId(29, nameof(IssuerValidationFailed)),
+            "Issuer validation failed: expected={ExpectedIssuer}, received={ReceivedIssuer}");
+
+    private static readonly Action<ILogger, Exception?> _issuerValidationSkipped =
+        LoggerMessage.Define(LogLevel.Debug, new EventId(30, nameof(IssuerValidationSkipped)),
+            "Issuer validation skipped: no issuer available from discovery (legacy endpoints)");
+
+    private static readonly Action<ILogger, string, Exception?> _issuerMissingFromCallback =
+        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(31, nameof(IssuerMissingFromCallback)),
+            "Issuer parameter missing from callback but expected issuer was {ExpectedIssuer}");
+
+    // Token refresh logging
+    private static readonly Action<ILogger, string, Exception?> _tokenRefreshStarted =
+        LoggerMessage.Define<string>(LogLevel.Debug, new EventId(32, nameof(TokenRefreshStarted)),
+            "Starting token refresh at {TokenEndpoint}");
+
+    private static readonly Action<ILogger, Exception?> _tokenRefreshSuccess =
+        LoggerMessage.Define(LogLevel.Debug, new EventId(33, nameof(TokenRefreshSuccess)),
+            "Token refresh successful");
+
+    private static readonly Action<ILogger, string, Exception?> _tokenRefreshFailed =
+        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(34, nameof(TokenRefreshFailed)),
+            "Token refresh failed: {Error}");
+
+    private static readonly Action<ILogger, Exception?> _tokenRefreshNewRefreshToken =
+        LoggerMessage.Define(LogLevel.Debug, new EventId(35, nameof(TokenRefreshNewRefreshToken)),
+            "Token refresh returned new refresh token, old token should be discarded");
+
+    internal static void IssuerValidationSuccess(ILogger logger, string expectedIssuer, string receivedIssuer)
+        => _issuerValidationSuccess(logger, expectedIssuer, receivedIssuer, null);
+
+    internal static void IssuerValidationFailed(ILogger logger, string expectedIssuer, string receivedIssuer)
+        => _issuerValidationFailed(logger, expectedIssuer, receivedIssuer, null);
+
+    internal static void IssuerValidationSkipped(ILogger logger)
+        => _issuerValidationSkipped(logger, null);
+
+    internal static void IssuerMissingFromCallback(ILogger logger, string expectedIssuer)
+        => _issuerMissingFromCallback(logger, expectedIssuer, null);
+
+    internal static void TokenRefreshStarted(ILogger logger, string tokenEndpoint)
+        => _tokenRefreshStarted(logger, tokenEndpoint, null);
+
+    internal static void TokenRefreshSuccess(ILogger logger)
+        => _tokenRefreshSuccess(logger, null);
+
+    internal static void TokenRefreshFailed(ILogger logger, string error)
+        => _tokenRefreshFailed(logger, error, null);
+
+    internal static void TokenRefreshNewRefreshToken(ILogger logger)
+        => _tokenRefreshNewRefreshToken(logger, null);
 }

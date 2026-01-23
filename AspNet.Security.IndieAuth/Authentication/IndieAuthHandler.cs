@@ -1,6 +1,7 @@
 ﻿using AspNet.Security.IndieAuth.Events;
 using AspNet.Security.IndieAuth.Infrastructure;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -65,6 +66,16 @@ public class IndieAuthHandler<TOptions> : RemoteAuthenticationHandler<TOptions> 
         if (!ValidateCorrelationId(properties))
         {
             return HandleRequestResult.Fail("Correlation failed.", properties);
+        }
+
+        // Issuer validation (RFC 9207 / Section 5.2.1)
+        if (Options.ValidateIssuer)
+        {
+            var issuerValidationResult = ValidateIssuerParameter(query, properties);
+            if (!issuerValidationResult.Success)
+            {
+                return HandleRequestResult.Fail(issuerValidationResult.ErrorMessage ?? "Issuer validation failed", properties);
+            }
         }
 
         var error = query["error"];
@@ -211,6 +222,10 @@ public class IndieAuthHandler<TOptions> : RemoteAuthenticationHandler<TOptions> 
             if (!string.IsNullOrEmpty(tokens.TokenType))
                 authTokens.Add(new AuthenticationToken { Name = "token_type", Value = tokens.TokenType });
 
+            // Store token endpoint for refresh operations (Section 5.5)
+            if (tokenEndpoint.success && !string.IsNullOrEmpty(tokenEndpoint.tokenEndpoint))
+                authTokens.Add(new AuthenticationToken { Name = "token_endpoint", Value = tokenEndpoint.tokenEndpoint });
+
             if (!string.IsNullOrEmpty(tokens.ExpiresIn))
             {
                 if (int.TryParse(tokens.ExpiresIn, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value))
@@ -289,6 +304,67 @@ public class IndieAuthHandler<TOptions> : RemoteAuthenticationHandler<TOptions> 
         }
 
         return IndieAuthTokenResponse.Failed(exception);
+    }
+
+    /// <summary>
+    /// Validates the issuer parameter from the authorization callback per RFC 9207.
+    /// </summary>
+    private (bool Success, string? ErrorMessage) ValidateIssuerParameter(
+        IQueryCollection query, 
+        AuthenticationProperties properties)
+    {
+        // Get the expected issuer from stored discovery result
+        var discoveryResultJson = properties.Items.TryGetValue(IndieAuthConstants.DiscoveryResultKey, out var drJson) ? drJson : null;
+        
+        if (string.IsNullOrEmpty(discoveryResultJson))
+        {
+            // No discovery result stored, skip validation
+            Log.IssuerValidationSkipped(Logger);
+            return (true, null);
+        }
+
+        string? expectedIssuer = null;
+        try
+        {
+            var discoveryData = JsonDocument.Parse(discoveryResultJson);
+            if (discoveryData.RootElement.TryGetProperty("Issuer", out var issuerElement))
+            {
+                expectedIssuer = issuerElement.GetString();
+            }
+        }
+        catch
+        {
+            // Failed to parse discovery result, skip validation
+            Log.IssuerValidationSkipped(Logger);
+            return (true, null);
+        }
+
+        if (string.IsNullOrEmpty(expectedIssuer))
+        {
+            // No issuer in discovery result (legacy endpoints), skip validation
+            Log.IssuerValidationSkipped(Logger);
+            return (true, null);
+        }
+
+        // Get the iss parameter from callback
+        var receivedIssuer = query["iss"].ToString();
+
+        if (string.IsNullOrEmpty(receivedIssuer))
+        {
+            // Missing iss parameter when we expected one
+            Log.IssuerMissingFromCallback(Logger, expectedIssuer);
+            return (false, $"Missing 'iss' parameter in authorization callback. Expected issuer: {expectedIssuer}");
+        }
+
+        // Simple string comparison per spec (case-sensitive, exact match)
+        if (!string.Equals(expectedIssuer, receivedIssuer, StringComparison.Ordinal))
+        {
+            Log.IssuerValidationFailed(Logger, expectedIssuer, receivedIssuer);
+            return (false, $"Issuer mismatch: expected '{expectedIssuer}', received '{receivedIssuer}'");
+        }
+
+        Log.IssuerValidationSuccess(Logger, expectedIssuer, receivedIssuer);
+        return (true, null);
     }
 
     /// <summary>
