@@ -90,6 +90,11 @@ internal static class Log
         LoggerMessage.Define<string>(LogLevel.Debug, new EventId(20, nameof(HeadRequestFallbackToGet)),
             "HEAD request found no Link headers for {ProfileUrl}, falling back to GET");
 
+    // Profile URL validation logging
+    private static readonly Action<ILogger, string, string, Exception?> _profileUrlValidationFailed =
+        LoggerMessage.Define<string, string>(LogLevel.Warning, new EventId(21, nameof(ProfileUrlValidationFailed)),
+            "Profile URL validation failed for {ProfileUrl}: {Reason}");
+
     internal static void DiscoveryStarted(ILogger logger, string? profileUrl)
         => _discoveryStarted(logger, profileUrl, null);
 
@@ -149,4 +154,7 @@ internal static class Log
 
     internal static void HeadRequestFallbackToGet(ILogger logger, string profileUrl)
         => _headRequestFallbackToGet(logger, profileUrl, null);
+
+    internal static void ProfileUrlValidationFailed(ILogger logger, string profileUrl, string reason)
+        => _profileUrlValidationFailed(logger, profileUrl, reason, null);
 }

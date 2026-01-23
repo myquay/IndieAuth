@@ -126,6 +126,19 @@ public class IndieAuthHandler<TOptions> : RemoteAuthenticationHandler<TOptions> 
         var returnedMe = tokens.Me;
         var me = properties.GetParameter<string>(IndieAuthChallengeProperties.MeKey);
 
+        // Validate the returned profile URL if strict validation is enabled
+        if (Options.StrictProfileUrlValidation && !string.IsNullOrEmpty(returnedMe))
+        {
+            var canonicalizedReturnedMe = returnedMe.Canonicalize();
+            var validationResult = canonicalizedReturnedMe.IsValidProfileUrl();
+            if (!validationResult.IsValid)
+            {
+                Log.ProfileUrlValidationFailed(Logger, returnedMe, validationResult.ErrorMessage ?? "Unknown error");
+                return HandleRequestResult.Fail(
+                    $"Returned profile URL validation failed: {validationResult.ErrorMessage}", properties);
+            }
+        }
+
         if (!string.Equals(returnedMe?.Canonicalize(), me?.Canonicalize(), StringComparison.OrdinalIgnoreCase))
         {
             return HandleRequestResult.Fail("Returned me value does not match the me value from the challenge.", properties);
@@ -247,6 +260,26 @@ public class IndieAuthHandler<TOptions> : RemoteAuthenticationHandler<TOptions> 
     protected override async Task HandleChallengeAsync(AuthenticationProperties properties)
     {
         var domain = properties.GetParameter<string>(IndieAuthChallengeProperties.MeKey);
+
+        // Validate profile URL if strict validation is enabled
+        if (Options.StrictProfileUrlValidation && !string.IsNullOrEmpty(domain))
+        {
+            var canonicalizedDomain = domain.Canonicalize();
+            var validationResult = canonicalizedDomain.IsValidProfileUrl();
+            if (!validationResult.IsValid)
+            {
+                Log.ProfileUrlValidationFailed(Logger, domain, validationResult.ErrorMessage ?? "Unknown error");
+                var failure = new AuthenticationFailureException(
+                    $"Profile URL validation failed: {validationResult.ErrorMessage}");
+                failure.Data["error"] = "invalid_request";
+                failure.Data["error_code"] = validationResult.ErrorCode.ToString();
+                await Events.RemoteFailure(new RemoteFailureContext(Context, Scheme, Options, failure)
+                {
+                    Failure = failure,
+                });
+                return;
+            }
+        }
 
         if (string.IsNullOrEmpty(domain) || !Uri.IsWellFormedUriString(domain, UriKind.Absolute))
         {

@@ -95,4 +95,22 @@ public class IndieAuthOptions : RemoteAuthenticationOptions
     public bool UseHeadRequestForDiscovery { get; set; }
 
     #endregion
+
+    #region Validation Options
+
+    /// <summary>
+    /// Gets or sets whether to enforce strict profile URL validation per IndieAuth spec section 3.2.
+    /// When enabled, profile URLs are validated against all spec requirements:
+    /// <list type="bullet">
+    ///   <item>MUST have http or https scheme</item>
+    ///   <item>MUST contain a path component</item>
+    ///   <item>MUST NOT contain dot path segments (. or ..)</item>
+    ///   <item>MUST NOT contain fragment, username, password, or port</item>
+    ///   <item>Host MUST be a domain name (not IP address)</item>
+    /// </list>
+    /// Default: true.
+    /// </summary>
+    public bool StrictProfileUrlValidation { get; set; } = true;
+
+    #endregion
 }
