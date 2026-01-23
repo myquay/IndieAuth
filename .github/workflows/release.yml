@@ -30,15 +30,15 @@ jobs:
       run: dotnet pack -p VersionPrefix=${{github.event.release.tag_name}} -p ReleaseNotes="${{github.event.release.body}}" --configuration Release
 
     - name: 💾 Archive package
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: nuget-package
         path: ${{github.workspace}}/**/AspNet.Security.IndieAuth.*.nupkg
 
     - name: 💾 Archive symbols package
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
-        name: nuget-package
+        name: nuget-symbols-package
         path: ${{github.workspace}}/**/AspNet.Security.IndieAuth.*.snupkg
 
     - name: 🛠️ Setup NuGet
