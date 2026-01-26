@@ -26,9 +26,8 @@ public class IndieAuthBearerHandler : AuthenticationHandler<IndieAuthBearerOptio
         IOptionsMonitor<IndieAuthBearerOptions> options,
         ILoggerFactory logger,
         UrlEncoder encoder,
-        ISystemClock clock,
         IMemoryCache? cache = null)
-        : base(options, logger, encoder, clock)
+        : base(options, logger, encoder)
     {
         _cache = cache;
     }
@@ -310,9 +309,8 @@ public class IndieAuthBearerHandler : AuthenticationHandler<IndieAuthBearerOptio
 
     private static string ComputeTokenHash(string token)
     {
-        using var sha256 = SHA256.Create();
         var bytes = Encoding.UTF8.GetBytes(token);
-        var hash = sha256.ComputeHash(bytes);
+        var hash = SHA256.HashData(bytes);
         return Convert.ToBase64String(hash);
     }
 

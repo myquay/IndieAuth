@@ -3,6 +3,12 @@
 An ASP.NET Core authentication handler adding support for authenticating visitors using the [IndieAuth protocol](https://indieauth.spec.indieweb.org/).
 
 [![NuGet](https://img.shields.io/nuget/v/AspNet.Security.IndieAuth.svg)](https://www.nuget.org/packages/AspNet.Security.IndieAuth/)
+![.NET](https://img.shields.io/badge/.NET-8.0%20%7C%2010.0-blue)
+
+## Supported Platforms
+
+- .NET 8.0 (LTS)
+- .NET 10.0
 
 ## Features
 
@@ -19,6 +25,7 @@ An ASP.NET Core authentication handler adding support for authenticating visitor
 - ✅ Userinfo Endpoint support (Section 9)
 - ✅ Discovery result caching
 - ✅ HEAD request optimization for discovery
+- ✅ Minimal API extensions
 
 ## Installation
 
@@ -99,6 +106,25 @@ public class MicropubController : Controller
         // ...
     }
 }
+```
+
+## Minimal API Support
+
+For simplified configuration, use the convenience extension methods:
+
+```csharp
+// Minimal API - IndieAuth login
+builder.Services.AddAuthentication()
+    .AddIndieAuth(
+        clientId: "https://myapp.example.com/",
+        callbackPath: "/auth/callback",
+        signInScheme: CookieAuthenticationDefaults.AuthenticationScheme);
+
+// Minimal API - Bearer token protection
+builder.Services.AddAuthentication()
+    .AddIndieAuthBearer(
+        introspectionEndpoint: "https://auth.example.com/introspect",
+        introspectionToken: "resource-server-token");
 ```
 
 ## Configuration Options

@@ -1,4 +1,5 @@
-﻿﻿using Microsoft.AspNetCore.Authentication;
+﻿using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
@@ -96,6 +97,57 @@ public static class IndieAuthExtensions
     {
         builder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<IPostConfigureOptions<IndieAuthBearerOptions>, IndieAuthBearerPostConfigureOptions>());
         return builder.AddScheme<IndieAuthBearerOptions, IndieAuthBearerHandler>(authenticationScheme, displayName, configureOptions);
+    }
+
+    #endregion
+
+    #region Minimal API Extensions
+
+    /// <summary>
+    /// Adds IndieAuth authentication with minimal configuration.
+    /// Ideal for Minimal API applications.
+    /// </summary>
+    /// <param name="builder">The <see cref="AuthenticationBuilder"/>.</param>
+    /// <param name="clientId">The client ID URL where the IndieAuth server can fetch client details.</param>
+    /// <param name="callbackPath">The path where the middleware intercepts the callback.</param>
+    /// <param name="signInScheme">The sign-in scheme to persist the session (defaults to cookie).</param>
+    /// <returns>A reference to <paramref name="builder"/> after the operation has completed.</returns>
+    public static AuthenticationBuilder AddIndieAuth(
+        this AuthenticationBuilder builder,
+        string clientId,
+        PathString callbackPath,
+        string? signInScheme = null)
+    {
+        return builder.AddIndieAuth(IndieAuthDefaults.AuthenticationScheme, options =>
+        {
+            options.ClientId = clientId;
+            options.CallbackPath = callbackPath;
+            if (signInScheme != null)
+            {
+                options.SignInScheme = signInScheme;
+            }
+        });
+    }
+
+    /// <summary>
+    /// Adds IndieAuth bearer token authentication with minimal configuration.
+    /// Ideal for Minimal API applications protecting endpoints with IndieAuth tokens.
+    /// </summary>
+    /// <param name="builder">The <see cref="AuthenticationBuilder"/>.</param>
+    /// <param name="introspectionEndpoint">The token introspection endpoint URL.</param>
+    /// <param name="introspectionToken">The bearer token for authenticating with the introspection endpoint.</param>
+    /// <returns>A reference to <paramref name="builder"/> after the operation has completed.</returns>
+    public static AuthenticationBuilder AddIndieAuthBearer(
+        this AuthenticationBuilder builder,
+        string introspectionEndpoint,
+        string introspectionToken)
+    {
+        return builder.AddIndieAuthBearer(options =>
+        {
+            options.IntrospectionEndpoint = introspectionEndpoint;
+            options.IntrospectionAuthenticationMethod = IntrospectionAuthMethod.Bearer;
+            options.IntrospectionToken = introspectionToken;
+        });
     }
 
     #endregion

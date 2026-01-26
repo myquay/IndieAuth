@@ -79,6 +79,11 @@ public class DiscoveryOptions
 /// </summary>
 public class IndieAuthDiscoveryService
 {
+    private static readonly JsonSerializerOptions s_jsonOptions = new()
+    {
+        PropertyNamingPolicy = new SnakeCaseNamingPolicy()
+    };
+
     private readonly HttpClient _httpClient;
     private readonly ILogger _logger;
     private readonly IDiscoveryCache? _cache;
@@ -257,9 +262,9 @@ public class IndieAuthDiscoveryService
         // 2. Check HTML <link> elements for indieauth-metadata
         var mf2Result = new Mf2().Parse(htmlContent);
 
-        if (mf2Result.Rels.ContainsKey("indieauth-metadata"))
+        if (mf2Result.Rels.TryGetValue("indieauth-metadata", out var metadataRels))
         {
-            var htmlMetadataUrl = mf2Result.Rels["indieauth-metadata"].First();
+            var htmlMetadataUrl = metadataRels.First();
             var resolvedMetadataUrl = LinkHeaderParser.ResolveUrl(htmlMetadataUrl, baseUri);
             Log.MetadataFoundInHtml(_logger, resolvedMetadataUrl);
             return await FetchMetadataAndExtractEndpoints(resolvedMetadataUrl, DiscoveryMethod.MetadataHtmlLink, discoveredUrls, profileUrl);
@@ -277,11 +282,11 @@ public class IndieAuthDiscoveryService
         }
 
         // 4. Legacy fallback: Check HTML <link> elements for authorization_endpoint and token_endpoint
-        var authEndpointFromHtml = mf2Result.Rels.ContainsKey("authorization_endpoint")
-            ? LinkHeaderParser.ResolveUrl(mf2Result.Rels["authorization_endpoint"].First(), baseUri)
+        var authEndpointFromHtml = mf2Result.Rels.TryGetValue("authorization_endpoint", out var authRels)
+            ? LinkHeaderParser.ResolveUrl(authRels.First(), baseUri)
             : null;
-        var tokenEndpointFromHtml = mf2Result.Rels.ContainsKey("token_endpoint")
-            ? LinkHeaderParser.ResolveUrl(mf2Result.Rels["token_endpoint"].First(), baseUri)
+        var tokenEndpointFromHtml = mf2Result.Rels.TryGetValue("token_endpoint", out var tokenRels)
+            ? LinkHeaderParser.ResolveUrl(tokenRels.First(), baseUri)
             : null;
 
         if (!string.IsNullOrEmpty(authEndpointFromHtml) && !string.IsNullOrEmpty(tokenEndpointFromHtml))
@@ -323,7 +328,7 @@ public class IndieAuthDiscoveryService
         {
             var metadata = JsonSerializer.Deserialize<IndieAuthServerMetadataResponse>(
                 await metadataResponse.Content.ReadAsStreamAsync(),
-                new JsonSerializerOptions { PropertyNamingPolicy = new SnakeCaseNamingPolicy() });
+                s_jsonOptions);
 
             if (metadata != null &&
                 !string.IsNullOrEmpty(metadata.AuthorizationEndpoint) &&

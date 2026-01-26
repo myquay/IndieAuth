@@ -1,15 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net6.0</TargetFramework>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
     <Authors>Michael McKenna</Authors>
     <Title>IndieAuth</Title>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <Company>$(Authors)</Company>
     <Description>ASP.NET Core authentication handler enabling IndieAuth authentication.</Description>
-    <Copyright>Copyright 2012-2023  Michael McKenna</Copyright>
+    <Copyright>Copyright 2012-2026 Michael McKenna</Copyright>
     <PackageProjectUrl>https://github.com/myquay/IndieAuth</PackageProjectUrl>
     <RepositoryUrl>https://github.com/myquay/IndieAuth.git</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
@@ -21,7 +22,7 @@
     <EnforceCodeStyleInBuild>True</EnforceCodeStyleInBuild>
     <PackageIcon>logo.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <AnalysisLevel>6.0-recommended</AnalysisLevel>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
@@ -50,8 +51,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Microformats" Version="1.1.2" />
-    <PackageReference Include="Microsoft.AspNetCore.Authentication" Version="2.2.0" />
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.2" />
   </ItemGroup>
 

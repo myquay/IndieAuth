@@ -36,7 +36,11 @@ public class IndieAuthHandler<TOptions> : RemoteAuthenticationHandler<TOptions> 
         set { base.Events = value; }
     }
 
-    public IndieAuthHandler(IOptionsMonitor<TOptions> options, ILoggerFactory logger, UrlEncoder encoder, ISystemClock clock) : base(options, logger, encoder, clock)
+    /// <summary>
+    /// Creates a new instance of <see cref="IndieAuthHandler{TOptions}"/>.
+    /// </summary>
+    public IndieAuthHandler(IOptionsMonitor<TOptions> options, ILoggerFactory logger, UrlEncoder encoder) 
+        : base(options, logger, encoder)
     {
     }
 
@@ -54,13 +58,13 @@ public class IndieAuthHandler<TOptions> : RemoteAuthenticationHandler<TOptions> 
         var state = query["state"];
         var properties = Options.StateDataFormat.Unprotect(state);
 
-        //Rehydrate the Me property from the state
-        properties.SetParameter(IndieAuthChallengeProperties.MeKey, properties.Items[IndieAuthChallengeProperties.MeKey]);
-
         if (properties == null)
         {
             return HandleRequestResults.InvalidState;
         }
+
+        //Rehydrate the Me property from the state
+        properties.SetParameter(IndieAuthChallengeProperties.MeKey, properties.Items[IndieAuthChallengeProperties.MeKey]);
 
         // OAuth2 10.12 CSRF
         if (!ValidateCorrelationId(properties))
@@ -568,7 +572,7 @@ public class IndieAuthHandler<TOptions> : RemoteAuthenticationHandler<TOptions> 
         parameters[IndieAuthConstants.CodeChallengeMethodKey] = IndieAuthConstants.CodeChallengeMethodS256;
 
         parameters["state"] = Options.StateDataFormat.Protect(properties);
-        parameters["me"] = properties.GetParameter<string>(IndieAuthChallengeProperties.MeKey);
+        parameters["me"] = properties.GetParameter<string>(IndieAuthChallengeProperties.MeKey) ?? string.Empty;
 
         return QueryHelpers.AddQueryString(authorizeEndpoint, parameters!);
     }

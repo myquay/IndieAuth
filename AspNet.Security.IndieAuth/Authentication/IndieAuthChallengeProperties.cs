@@ -59,14 +59,14 @@ public class IndieAuthChallengeProperties : AuthenticationProperties
     /// </summary>
     public string Me
     {
-        get
-        {
-            return GetParameter<string>(MeKey) ?? Items[MeKey];
-        }
+        get =>
+            GetParameter<string>(MeKey) 
+            ?? (Items.TryGetValue(MeKey, out var value) ? value : null) 
+            ?? string.Empty;
         set
         {
             SetParameter(MeKey, value.Canonicalize());
-            Items.Add(MeKey, value.Canonicalize());
+            Items[MeKey] = value.Canonicalize();
         }
     }
 

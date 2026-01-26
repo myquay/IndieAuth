@@ -7,6 +7,7 @@ namespace AspNet.Security.IndieAuth;
 /// </summary>
 public static class StringExtensions
 {
+    private static readonly char[] s_pathSeparators = ['/', '?', '#'];
     /// <summary>
     /// Canonicalizes a URL according to IndieAuth specification section 3.4.
     /// </summary>
@@ -203,7 +204,7 @@ public static class StringExtensions
         if (schemeEnd < 0) return false;
 
         var authorityStart = schemeEnd + 3;
-        var authorityEnd = url.IndexOfAny(new[] { '/', '?', '#' }, authorityStart);
+        var authorityEnd = url.IndexOfAny(s_pathSeparators, authorityStart);
         if (authorityEnd < 0) authorityEnd = url.Length;
 
         var authority = url[authorityStart..authorityEnd];
