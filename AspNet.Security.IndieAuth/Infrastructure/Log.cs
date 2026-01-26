@@ -248,6 +248,19 @@ internal static class Log
         LoggerMessage.Define<string>(LogLevel.Warning, new EventId(38, nameof(TokenRevocationFailed)),
             "Token revocation failed: {Error}");
 
+    // Userinfo logging
+    private static readonly Action<ILogger, string, Exception?> _userinfoStarted =
+        LoggerMessage.Define<string>(LogLevel.Debug, new EventId(43, nameof(UserinfoStarted)),
+            "Fetching userinfo from {UserinfoEndpoint}");
+
+    private static readonly Action<ILogger, Exception?> _userinfoSuccess =
+        LoggerMessage.Define(LogLevel.Debug, new EventId(44, nameof(UserinfoSuccess)),
+            "Userinfo fetch successful");
+
+    private static readonly Action<ILogger, string, Exception?> _userinfoFailed =
+        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(45, nameof(UserinfoFailed)),
+            "Userinfo fetch failed: {Error}");
+
     internal static void IssuerValidationSuccess(ILogger logger, string expectedIssuer, string receivedIssuer)
         => _issuerValidationSuccess(logger, expectedIssuer, receivedIssuer, null);
 
@@ -280,4 +293,13 @@ internal static class Log
 
     internal static void TokenRevocationFailed(ILogger logger, string error)
         => _tokenRevocationFailed(logger, error, null);
+
+    internal static void UserinfoStarted(ILogger logger, string userinfoEndpoint)
+        => _userinfoStarted(logger, userinfoEndpoint, null);
+
+    internal static void UserinfoSuccess(ILogger logger)
+        => _userinfoSuccess(logger, null);
+
+    internal static void UserinfoFailed(ILogger logger, string error)
+        => _userinfoFailed(logger, error, null);
 }
