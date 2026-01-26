@@ -235,6 +235,19 @@ internal static class Log
         LoggerMessage.Define(LogLevel.Debug, new EventId(35, nameof(TokenRefreshNewRefreshToken)),
             "Token refresh returned new refresh token, old token should be discarded");
 
+    // Token revocation logging
+    private static readonly Action<ILogger, string, Exception?> _tokenRevocationStarted =
+        LoggerMessage.Define<string>(LogLevel.Debug, new EventId(36, nameof(TokenRevocationStarted)),
+            "Starting token revocation at {RevocationEndpoint}");
+
+    private static readonly Action<ILogger, Exception?> _tokenRevocationSuccess =
+        LoggerMessage.Define(LogLevel.Debug, new EventId(37, nameof(TokenRevocationSuccess)),
+            "Token revocation successful");
+
+    private static readonly Action<ILogger, string, Exception?> _tokenRevocationFailed =
+        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(38, nameof(TokenRevocationFailed)),
+            "Token revocation failed: {Error}");
+
     internal static void IssuerValidationSuccess(ILogger logger, string expectedIssuer, string receivedIssuer)
         => _issuerValidationSuccess(logger, expectedIssuer, receivedIssuer, null);
 
@@ -258,4 +271,13 @@ internal static class Log
 
     internal static void TokenRefreshNewRefreshToken(ILogger logger)
         => _tokenRefreshNewRefreshToken(logger, null);
+
+    internal static void TokenRevocationStarted(ILogger logger, string revocationEndpoint)
+        => _tokenRevocationStarted(logger, revocationEndpoint, null);
+
+    internal static void TokenRevocationSuccess(ILogger logger)
+        => _tokenRevocationSuccess(logger, null);
+
+    internal static void TokenRevocationFailed(ILogger logger, string error)
+        => _tokenRevocationFailed(logger, error, null);
 }
