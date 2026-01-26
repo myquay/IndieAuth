@@ -302,4 +302,96 @@ internal static class Log
 
     internal static void UserinfoFailed(ILogger logger, string error)
         => _userinfoFailed(logger, error, null);
+
+    // Token introspection logging
+    private static readonly Action<ILogger, string, Exception?> _tokenIntrospectionStarted =
+        LoggerMessage.Define<string>(LogLevel.Debug, new EventId(50, nameof(TokenIntrospectionStarted)),
+            "Starting token introspection at {IntrospectionEndpoint}");
+
+    private static readonly Action<ILogger, string, Exception?> _tokenIntrospectionResponse =
+        LoggerMessage.Define<string>(LogLevel.Trace, new EventId(51, nameof(TokenIntrospectionResponse)),
+            "Token introspection response: {Response}");
+
+    private static readonly Action<ILogger, string, Exception?> _tokenIntrospectionSuccess =
+        LoggerMessage.Define<string>(LogLevel.Debug, new EventId(52, nameof(TokenIntrospectionSuccess)),
+            "Token introspection successful for user {Me}");
+
+    private static readonly Action<ILogger, Exception?> _tokenIntrospectionInactive =
+        LoggerMessage.Define(LogLevel.Debug, new EventId(53, nameof(TokenIntrospectionInactive)),
+            "Token introspection returned inactive token");
+
+    private static readonly Action<ILogger, string, int, string, Exception?> _tokenIntrospectionFailed =
+        LoggerMessage.Define<string, int, string>(LogLevel.Warning, new EventId(54, nameof(TokenIntrospectionFailed)),
+            "Token introspection failed for {IntrospectionEndpoint}: HTTP {StatusCode} - {Content}");
+
+    private static readonly Action<ILogger, string, Exception?> _tokenIntrospectionUnauthorized =
+        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(55, nameof(TokenIntrospectionUnauthorized)),
+            "Token introspection unauthorized at {IntrospectionEndpoint}");
+
+    private static readonly Action<ILogger, Exception?> _tokenIntrospectionMissingMe =
+        LoggerMessage.Define(LogLevel.Warning, new EventId(56, nameof(TokenIntrospectionMissingMe)),
+            "Token introspection response missing required 'me' property for active token");
+
+    private static readonly Action<ILogger, Exception> _tokenIntrospectionException =
+        LoggerMessage.Define(LogLevel.Error, new EventId(57, nameof(TokenIntrospectionException)),
+            "Token introspection failed with exception");
+
+    private static readonly Action<ILogger, Exception> _tokenIntrospectionJsonError =
+        LoggerMessage.Define(LogLevel.Warning, new EventId(58, nameof(TokenIntrospectionJsonError)),
+            "Failed to parse token introspection response");
+
+    private static readonly Action<ILogger, string, Exception?> _bearerTokenExtracted =
+        LoggerMessage.Define<string>(LogLevel.Debug, new EventId(59, nameof(BearerTokenExtracted)),
+            "Extracted bearer token from Authorization header (length: {Length})");
+
+    private static readonly Action<ILogger, Exception?> _bearerTokenMissing =
+        LoggerMessage.Define(LogLevel.Debug, new EventId(60, nameof(BearerTokenMissing)),
+            "No bearer token found in Authorization header");
+
+    private static readonly Action<ILogger, string, Exception?> _introspectionCacheHit =
+        LoggerMessage.Define<string>(LogLevel.Debug, new EventId(61, nameof(IntrospectionCacheHit)),
+            "Introspection cache hit for token hash {TokenHash}");
+
+    private static readonly Action<ILogger, string, Exception?> _introspectionCacheMiss =
+        LoggerMessage.Define<string>(LogLevel.Debug, new EventId(62, nameof(IntrospectionCacheMiss)),
+            "Introspection cache miss for token hash {TokenHash}");
+
+    internal static void TokenIntrospectionStarted(ILogger logger, string introspectionEndpoint)
+        => _tokenIntrospectionStarted(logger, introspectionEndpoint, null);
+
+    internal static void TokenIntrospectionResponse(ILogger logger, string response)
+        => _tokenIntrospectionResponse(logger, response, null);
+
+    internal static void TokenIntrospectionSuccess(ILogger logger, string me)
+        => _tokenIntrospectionSuccess(logger, me, null);
+
+    internal static void TokenIntrospectionInactive(ILogger logger)
+        => _tokenIntrospectionInactive(logger, null);
+
+    internal static void TokenIntrospectionFailed(ILogger logger, string introspectionEndpoint, int statusCode, string content)
+        => _tokenIntrospectionFailed(logger, introspectionEndpoint, statusCode, content, null);
+
+    internal static void TokenIntrospectionUnauthorized(ILogger logger, string introspectionEndpoint)
+        => _tokenIntrospectionUnauthorized(logger, introspectionEndpoint, null);
+
+    internal static void TokenIntrospectionMissingMe(ILogger logger)
+        => _tokenIntrospectionMissingMe(logger, null);
+
+    internal static void TokenIntrospectionException(ILogger logger, Exception exception)
+        => _tokenIntrospectionException(logger, exception);
+
+    internal static void TokenIntrospectionJsonError(ILogger logger, Exception exception)
+        => _tokenIntrospectionJsonError(logger, exception);
+
+    internal static void BearerTokenExtracted(ILogger logger, int length)
+        => _bearerTokenExtracted(logger, length.ToString(System.Globalization.CultureInfo.InvariantCulture), null);
+
+    internal static void BearerTokenMissing(ILogger logger)
+        => _bearerTokenMissing(logger, null);
+
+    internal static void IntrospectionCacheHit(ILogger logger, string tokenHash)
+        => _introspectionCacheHit(logger, tokenHash, null);
+
+    internal static void IntrospectionCacheMiss(ILogger logger, string tokenHash)
+        => _introspectionCacheMiss(logger, tokenHash, null);
 }

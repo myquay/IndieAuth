@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authentication;
+﻿﻿using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
@@ -59,4 +59,44 @@ public static class IndieAuthExtensions
         builder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<IPostConfigureOptions<TOptions>, IndieAuthPostConfigureOptions<TOptions, THandler>>());
         return builder.AddRemoteScheme<TOptions, THandler>(authenticationScheme, displayName, configureOptions);
     }
+
+    #region IndieAuth Bearer Token Authentication
+
+    /// <summary>
+    /// Adds IndieAuth bearer token authentication using the default scheme.
+    /// Use this to protect API endpoints with IndieAuth access tokens.
+    /// </summary>
+    /// <param name="builder">The <see cref="AuthenticationBuilder"/>.</param>
+    /// <param name="configureOptions">A delegate to configure <see cref="IndieAuthBearerOptions"/>.</param>
+    /// <returns>A reference to <paramref name="builder"/> after the operation has completed.</returns>
+    public static AuthenticationBuilder AddIndieAuthBearer(this AuthenticationBuilder builder, Action<IndieAuthBearerOptions> configureOptions)
+        => builder.AddIndieAuthBearer(IndieAuthBearerDefaults.AuthenticationScheme, configureOptions);
+
+    /// <summary>
+    /// Adds IndieAuth bearer token authentication using the specified scheme.
+    /// Use this to protect API endpoints with IndieAuth access tokens.
+    /// </summary>
+    /// <param name="builder">The <see cref="AuthenticationBuilder"/>.</param>
+    /// <param name="authenticationScheme">The authentication scheme.</param>
+    /// <param name="configureOptions">A delegate to configure <see cref="IndieAuthBearerOptions"/>.</param>
+    /// <returns>A reference to <paramref name="builder"/> after the operation has completed.</returns>
+    public static AuthenticationBuilder AddIndieAuthBearer(this AuthenticationBuilder builder, string authenticationScheme, Action<IndieAuthBearerOptions> configureOptions)
+        => builder.AddIndieAuthBearer(authenticationScheme, IndieAuthBearerDefaults.DisplayName, configureOptions);
+
+    /// <summary>
+    /// Adds IndieAuth bearer token authentication using the specified scheme and display name.
+    /// Use this to protect API endpoints with IndieAuth access tokens.
+    /// </summary>
+    /// <param name="builder">The <see cref="AuthenticationBuilder"/>.</param>
+    /// <param name="authenticationScheme">The authentication scheme.</param>
+    /// <param name="displayName">A display name for the authentication handler.</param>
+    /// <param name="configureOptions">A delegate to configure <see cref="IndieAuthBearerOptions"/>.</param>
+    /// <returns>A reference to <paramref name="builder"/> after the operation has completed.</returns>
+    public static AuthenticationBuilder AddIndieAuthBearer(this AuthenticationBuilder builder, string authenticationScheme, string displayName, Action<IndieAuthBearerOptions> configureOptions)
+    {
+        builder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<IPostConfigureOptions<IndieAuthBearerOptions>, IndieAuthBearerPostConfigureOptions>());
+        return builder.AddScheme<IndieAuthBearerOptions, IndieAuthBearerHandler>(authenticationScheme, displayName, configureOptions);
+    }
+
+    #endregion
 }

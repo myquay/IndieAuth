@@ -14,6 +14,8 @@ An ASP.NET Core authentication handler adding support for authenticating visitor
 - ✅ Profile Information parsing (Section 5.3.4)
 - ✅ Token Refresh support (Section 5.5)
 - ✅ Token Revocation support (Section 7)
+- ✅ Token Introspection support (Section 6)
+- ✅ Bearer Token Authentication for APIs
 - ✅ Userinfo Endpoint support (Section 9)
 - ✅ Discovery result caching
 - ✅ HEAD request optimization for discovery
@@ -55,6 +57,50 @@ return Challenge(new IndieAuthChallengeProperties
 }, IndieAuthDefaults.AuthenticationScheme);
 ```
 
+## Bearer Token Authentication for APIs
+
+To protect API endpoints with IndieAuth tokens (using token introspection):
+
+```csharp
+builder.Services.AddAuthentication()
+    .AddIndieAuthBearer("IndieAuthBearer", options =>
+    {
+        // Option 1: Explicit introspection endpoint
+        options.IntrospectionEndpoint = "https://auth.example.com/introspect";
+        
+        // Option 2: Discover from authority URL
+        options.Authority = "https://example.com/";
+        
+        // Authentication for introspection endpoint
+        options.IntrospectionAuthenticationMethod = IntrospectionAuthMethod.Bearer;
+        options.IntrospectionToken = "resource-server-token";
+        
+        // Or use client credentials
+        options.IntrospectionAuthenticationMethod = IntrospectionAuthMethod.ClientCredentials;
+        options.ClientId = "my-resource-server";
+        options.ClientSecret = "secret";
+        
+        // Caching (optional)
+        options.CacheIntrospectionResults = true;
+        options.IntrospectionCacheExpiration = TimeSpan.FromMinutes(5);
+    });
+```
+
+Use the `[Authorize]` attribute to protect controllers:
+
+```csharp
+[Authorize(AuthenticationSchemes = "IndieAuthBearer")]
+public class MicropubController : Controller
+{
+    public IActionResult Post()
+    {
+        var me = User.FindFirst("me")?.Value;
+        var scopes = User.FindFirst("scope")?.Value?.Split(' ');
+        // ...
+    }
+}
+```
+
 ## Configuration Options
 
 ### IndieAuthOptions
@@ -84,6 +130,24 @@ return Challenge(new IndieAuthChallengeProperties
 ## Standalone Services
 
 The library provides standalone services for token management:
+
+### Token Introspection
+
+```csharp
+var introspectionService = new TokenIntrospectionService(httpClient);
+var result = await introspectionService.IntrospectTokenAsync(
+    "https://auth.example.com/introspect",
+    accessToken,
+    IntrospectionAuthMethod.Bearer,
+    authToken: "resource-server-token");
+
+if (result.Success && result.Active)
+{
+    var userUrl = result.Me;
+    var scopes = result.Scope;
+    var clientId = result.ClientId;
+}
+```
 
 ### Token Refresh
 
@@ -191,7 +255,7 @@ This library implements the [IndieAuth Living Standard](https://indieauth.spec.i
 | 5.3.4 | Profile Information | ✅ |
 | 5.4 | Authorization Server Confirmation | ✅ |
 | 5.5 | Token Refresh | ✅ |
-| 6 | Token Introspection | ❌ Planned |
+| 6 | Token Introspection | ✅ |
 | 7 | Token Revocation | ✅ |
 | 9 | Userinfo Endpoint | ✅ |
 
