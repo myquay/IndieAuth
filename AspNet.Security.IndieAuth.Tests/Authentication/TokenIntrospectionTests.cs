@@ -1,6 +1,5 @@
 using System.Net;
 using System.Text;
-using AspNet.Security.IndieAuth;
 using AspNet.Security.IndieAuth.Tests.Helpers;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -389,8 +388,7 @@ public class TokenIntrospectionTests
         // Act
         await service.IntrospectTokenAsync(
             "https://auth.example.com/introspect",
-            "test-token",
-            IntrospectionAuthMethod.None);
+            "test-token");
 
         // Assert
         var request = mockHandler.Requests[0];
