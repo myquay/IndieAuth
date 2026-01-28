@@ -10,23 +10,6 @@ An ASP.NET Core authentication handler adding support for authenticating visitor
 - .NET 8.0 (LTS)
 - .NET 10.0
 
-## Features
-
-- ✅ Full IndieAuth specification compliance
-- ✅ Discovery via `indieauth-metadata` and legacy `authorization_endpoint` 
-- ✅ PKCE (S256) for secure authorization
-- ✅ Issuer validation (RFC 9207)
-- ✅ Authorization Server Confirmation (Section 5.4)
-- ✅ Profile Information parsing (Section 5.3.4)
-- ✅ Token Refresh support (Section 5.5)
-- ✅ Token Revocation support (Section 7)
-- ✅ Token Introspection support (Section 6)
-- ✅ Bearer Token Authentication for APIs
-- ✅ Userinfo Endpoint support (Section 9)
-- ✅ Discovery result caching
-- ✅ HEAD request optimization for discovery
-- ✅ Minimal API extensions
-
 ## Installation
 
 This library is distributed as a NuGet package. To install with the .NET CLI:
