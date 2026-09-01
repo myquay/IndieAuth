@@ -23,7 +23,14 @@ public class IndieAuthTokenResponse : IDisposable
         if (root.TryGetProperty("refresh_token", out var refreshToken))
             RefreshToken = refreshToken.GetString();
         if (root.TryGetProperty("expires_in", out var expiresIn))
-            ExpiresIn = expiresIn.GetString();
+        {
+            ExpiresIn = expiresIn.ValueKind switch
+            {
+                JsonValueKind.Number => expiresIn.GetRawText(),
+                JsonValueKind.String => expiresIn.GetString(),
+                _ => null
+            };
+        }
 
         Me = root.GetProperty("me").GetString();
         
